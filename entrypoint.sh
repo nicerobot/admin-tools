@@ -30,6 +30,16 @@ case "${command}" in
     [ "${INPUT_CLEANUP_DRY_RUN:-false}" = "true" ] && set -- "$@" --dry-run
     exec radm cleanup-runs "$@"
     ;;
+  dependabot-sweep)
+    # radm splits a comma-separated --owner value itself, so the owner list
+    # passes through as one argument and no word splitting happens here.
+    set -- --owner "${INPUT_SWEEP_OWNERS:?INPUT_SWEEP_OWNERS is required for dependabot-sweep}"
+    set -- "$@" --merge-method "${INPUT_SWEEP_MERGE_METHOD:-squash}"
+    set -- "$@" --rate-floor "${INPUT_SWEEP_RATE_FLOOR:-200}"
+    [ "${INPUT_SWEEP_ALLOW_MAJOR:-false}" = "true" ] && set -- "$@" --allow-major
+    [ "${INPUT_SWEEP_DRY_RUN:-false}" = "true" ] && set -- "$@" --dry-run
+    exec radm dependabot-sweep "$@"
+    ;;
   *)
     echo "Unknown command: ${command}" >&2
     exit 1

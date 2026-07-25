@@ -2,6 +2,7 @@ package dependabot
 
 import (
 	"context"
+	"strings"
 
 	"github.com/urfave/cli/v3"
 
@@ -92,11 +93,19 @@ func Command() *cli.Command {
 // bindOwners converts the repeatable string flags into their domain types. The
 // flag tier cannot bind []repo.Owner directly, so the conversion happens here
 // rather than leaking string slices into the domain Config.
+//
+// Owners are trimmed and empties dropped. A comma-separated list reaches this
+// tier with whitespace attached whenever it was written as a wrapped YAML
+// scalar (a workflow folding "a,\n b" into "a, b"), and a padded owner silently
+// matches nothing rather than failing — so the sweep would report success while
+// skipping that owner entirely.
 func bindOwners(ctx context.Context, _ *cli.Command) (context.Context, error) {
 	cfg.Owners = make([]repo.Owner, 0, len(owners))
 	for _, o := range owners {
-		cfg.Owners = append(cfg.Owners, repo.Owner(o))
+		if trimmed := strings.TrimSpace(o); trimmed != "" {
+			cfg.Owners = append(cfg.Owners, repo.Owner(trimmed))
+		}
 	}
-	cfg.MergeMethod = repo.MergeMethod(method)
+	cfg.MergeMethod = repo.MergeMethod(strings.TrimSpace(method))
 	return ctx, nil
 }
