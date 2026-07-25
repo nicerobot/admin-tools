@@ -1,0 +1,57 @@
+name: Dependabot sweep
+
+# Merges green, non-major Dependabot pull requests across the whole fleet.
+#
+# This exists because GitHub's native auto-merge is a paid feature for private
+# repositories: the API accepts allow_auto_merge, returns 200, and silently
+# ignores it. Merging through the pull-request API carries no plan gate, so one
+# scheduled job covers public and private repos identically — and one job is far
+# cheaper than a per-repo workflow across ~600 repositories, both to maintain and
+# in metered private-repo Actions minutes.
+#
+# Auth: the fleet spans many owners, so the run needs a token with pull-request
+# write access beyond this repository. GITHUB_TOKEN is scoped to tools.admin
+# alone and cannot merge elsewhere; FLEET_SWEEP_TOKEN supplies the wider scope.
+# Without that secret the job fails closed rather than silently sweeping nothing.
+
+on:
+  schedule:
+    # Daily, after the weekly Monday CI crons have had time to report.
+    - cron: "40 8 * * *"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Report what would be merged without merging"
+        type: boolean
+        default: true
+      allow-major:
+        description: "Also merge major version bumps (off by fleet policy)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: dependabot-sweep
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: nicerobot/tools.admin@main
+        with:
+          command: dependabot-sweep
+          # The fleet's owners. This list is the one place the sweep's reach is
+          # enumerated; an owner absent here is never swept.
+          sweep-owners: >-
+            admittance,backplane-arcane,entropic-vestibule,gloo-foo,gomatic,
+            ixnai,kicktheclouds,kisstokilltime,nix-church,over-social,
+            platformaccountability-org,selfmux,skykernel,sqlrest,tildelane,
+            tsvsheet,uplang,what-the-function,xto-email,yupsh,nicerobot
+          sweep-dry-run: ${{ inputs.dry-run || 'false' }}
+          sweep-allow-major: ${{ inputs.allow-major || 'false' }}
+        env:
+          GH_TOKEN: ${{ secrets.FLEET_SWEEP_TOKEN }}

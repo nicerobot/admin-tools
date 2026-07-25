@@ -92,3 +92,55 @@ func TestDependabotSweepCommand(t *testing.T) {
 		})
 	}
 }
+
+func TestBindOwnersTrimsWrappedYAMLScalars(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []repo.Owner
+	}{
+		{
+			name: "comma-space list from a folded YAML scalar",
+			args: []string{"app", "dependabot-sweep", "--owner", "acme, other,  third"},
+			want: []repo.Owner{"acme", "other", "third"},
+		},
+		{
+			name: "empty entries are dropped, not swept as blank owners",
+			args: []string{"app", "dependabot-sweep", "--owner", "acme,,  ,other"},
+			want: []repo.Owner{"acme", "other"},
+		},
+		{
+			name: "padded merge method is trimmed",
+			args: []string{"app", "dependabot-sweep", "--owner", "acme", "--merge-method", " rebase "},
+			want: []repo.Owner{"acme"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			want, must := assert.New(t), require.New(t)
+
+			origRun, origCfg, origOwners, origMethod := runAction, cfg, owners, method
+			t.Cleanup(func() { runAction, cfg, owners, method = origRun, origCfg, origOwners, origMethod })
+			cfg, owners, method = domain.Config{}, nil, string(repo.MergeMethodSquash)
+
+			var gotCfg domain.Config
+			runAction = func(_ context.Context, _ *slog.Logger, c domain.Config, _ ...string) (domain.Result, error) {
+				gotCfg = c
+				return domain.Result{Pulls: []domain.PullResult{}}, nil
+			}
+
+			appCmd := &cli.Command{
+				Name:     "app",
+				Writer:   &bytes.Buffer{},
+				Commands: []*cli.Command{Command()},
+				Metadata: map[string]any{app.LoggerMetadataKey: slog.New(
+					slog.NewTextHandler(&bytes.Buffer{}, &slog.HandlerOptions{Level: slog.LevelWarn}))},
+			}
+
+			must.NoError(appCmd.Run(context.Background(), tt.args))
+			want.Equal(tt.want, gotCfg.Owners)
+			want.NotContains(string(gotCfg.MergeMethod), " ")
+		})
+	}
+}
