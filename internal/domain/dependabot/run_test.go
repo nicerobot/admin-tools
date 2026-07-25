@@ -411,3 +411,124 @@ func TestOSDepsBuildsClient(t *testing.T) {
 	require.New(t).NoError(err)
 	assert.New(t).NotNil(d.github)
 }
+
+func TestExcluded(t *testing.T) {
+	tests := []struct {
+		name        string
+		owner       repo.Owner
+		repoName    repo.Name
+		wantPattern repo.ExcludePattern
+		patterns    []repo.ExcludePattern
+		wantHeld    bool
+	}{
+		{
+			name:        "dotted family glob holds a repo the API cannot reveal as held",
+			patterns:    []repo.ExcludePattern{"robertcnix/fmt.*"},
+			owner:       "robertcnix",
+			repoName:    "fmt.api",
+			wantPattern: "robertcnix/fmt.*",
+			wantHeld:    true,
+		},
+		{
+			name:     "same glob does not reach another owner",
+			patterns: []repo.ExcludePattern{"robertcnix/fmt.*"},
+			owner:    "gomatic",
+			repoName: "fmt.api",
+		},
+		{
+			name:     "prefix glob does not match a differently-punctuated sibling",
+			patterns: []repo.ExcludePattern{"robertcnix/fmt.*"},
+			owner:    "robertcnix",
+			repoName: "fmt-user.plugin",
+		},
+		{
+			name:        "exact slug",
+			patterns:    []repo.ExcludePattern{"uplang/up.go"},
+			owner:       "uplang",
+			repoName:    "up.go",
+			wantPattern: "uplang/up.go",
+			wantHeld:    true,
+		},
+		{
+			name:        "first matching pattern is the one reported",
+			patterns:    []repo.ExcludePattern{"acme/*", "acme/widget"},
+			owner:       "acme",
+			repoName:    "widget",
+			wantPattern: "acme/*",
+			wantHeld:    true,
+		},
+		{
+			name:     "owner glob does not span the separator",
+			patterns: []repo.ExcludePattern{"*"},
+			owner:    "acme",
+			repoName: "widget",
+		},
+		{
+			name:     "malformed pattern never matches",
+			patterns: []repo.ExcludePattern{"acme/[", "acme/widget"},
+			owner:    "acme",
+			repoName: "other",
+		},
+		{
+			name:     "no patterns holds nothing",
+			patterns: nil,
+			owner:    "acme",
+			repoName: "widget",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			want := assert.New(t)
+			pattern, held := excluded(tt.patterns, tt.owner, tt.repoName)
+			want.Equal(tt.wantHeld, held)
+			want.Equal(tt.wantPattern, pattern)
+		})
+	}
+}
+
+// TestRunSkipsHeldRepositoryBeforeSpendingRequests is the case that motivated
+// the flag: a repo its owner holds in _admin/manifest.yaml must be skipped
+// without the sweep fetching the pull request or its checks, and the result must
+// name the pattern responsible.
+func TestRunSkipsHeldRepositoryBeforeSpendingRequests(t *testing.T) {
+	want, must := assert.New(t), require.New(t)
+
+	gh := &fakeGH{
+		remaining: 100,
+		items:     []github.SearchItem{item(1)},
+		pulls:     map[string]github.PullRequest{"widget": withinMajor()},
+		checks:    map[string][]github.CheckRun{"widget": passing("go")},
+		getErr:    errors.New("GetPullRequest must not be called for a held repo"),
+		checksErr: errors.New("ListCheckRuns must not be called for a held repo"),
+	}
+	cfg := baseCfg()
+	cfg.Excludes = []repo.ExcludePattern{"acme/wid*"}
+
+	result, err := sweep(t, gh, cfg)
+	must.NoError(err)
+
+	must.Len(result.Pulls, 1)
+	want.Equal("excluded by pattern acme/wid*", result.Pulls[0].Reason)
+	want.False(result.Pulls[0].IsMerged)
+	want.Equal(1, result.Skipped)
+	want.Empty(gh.merges)
+}
+
+func TestRunSweepsRepositoriesNoPatternHolds(t *testing.T) {
+	want, must := assert.New(t), require.New(t)
+
+	gh := &fakeGH{
+		remaining: 100,
+		items:     []github.SearchItem{item(1)},
+		pulls:     map[string]github.PullRequest{"widget": withinMajor()},
+		checks:    map[string][]github.CheckRun{"widget": passing("go")},
+	}
+	cfg := baseCfg()
+	cfg.Excludes = []repo.ExcludePattern{"other/*", "acme/different"}
+
+	result, err := sweep(t, gh, cfg)
+	must.NoError(err)
+	want.Equal(1, result.Merged)
+	want.Len(gh.merges, 1)
+}

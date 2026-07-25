@@ -51,6 +51,12 @@ jobs:
             ixnai,kicktheclouds,kisstokilltime,nix-church,over-social,
             platformaccountability-org,selfmux,skykernel,sqlrest,tildelane,
             tsvsheet,uplang,what-the-function,xto-email,yupsh,nicerobot
+          # The robertcnix account holds code the owner does not maintain, so
+          # nothing there may be merged into. Org-level excluded-repos holds are
+          # deliberately NOT listed: those hold a repo back from the build bundle
+          # and standards distribution, which says nothing about whether its
+          # dependency updates should land. Every org repo is in scope.
+          sweep-excludes: robertcnix/*
           sweep-dry-run: ${{ inputs.dry-run || 'false' }}
           sweep-allow-major: ${{ inputs.allow-major || 'false' }}
         env:

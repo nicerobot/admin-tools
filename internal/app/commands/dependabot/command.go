@@ -24,6 +24,11 @@ version transition cannot be parsed is never merged at all. Every pull request
 left alone is reported with the reason it was skipped, so a sweep never reads as
 complete when it was not.
 
+Repositories an owner holds back in its _admin/manifest.yaml are invisible to the
+GitHub API, so pass them as --exclude "owner/name" globs; a held repository is
+skipped before any request is spent on it, and the result names the pattern that
+held it.
+
 Discovery costs one search request per owner rather than one per repository, and
 the sweep stops cleanly once the remaining API budget reaches --rate-floor,
 reporting stopped_early rather than failing partway.
@@ -36,6 +41,7 @@ const (
 	ownerFlag      = "owner"
 	methodFlag     = "merge-method"
 	rateFloorFlag  = "rate-floor"
+	excludeFlag    = "exclude"
 	allowMajorFlag = "allow-major"
 	dryRunFlag     = "dry-run"
 )
@@ -46,6 +52,7 @@ var (
 	cfg       domain.Config
 	runAction = domain.Run
 	owners    []string
+	excludes  []string
 	method    = string(repo.MergeMethodSquash)
 )
 
@@ -63,6 +70,11 @@ func Command() *cli.Command {
 				Name:        ownerFlag,
 				Usage:       "GitHub user or organization to sweep (repeatable)",
 				Destination: &owners,
+			},
+			&cli.StringSliceFlag{
+				Name:        excludeFlag,
+				Usage:       "Skip repositories matching this owner/name glob (repeatable)",
+				Destination: &excludes,
 			},
 			&cli.StringFlag{
 				Name:        methodFlag,
@@ -104,6 +116,12 @@ func bindOwners(ctx context.Context, _ *cli.Command) (context.Context, error) {
 	for _, o := range owners {
 		if trimmed := strings.TrimSpace(o); trimmed != "" {
 			cfg.Owners = append(cfg.Owners, repo.Owner(trimmed))
+		}
+	}
+	cfg.Excludes = make([]repo.ExcludePattern, 0, len(excludes))
+	for _, e := range excludes {
+		if trimmed := strings.TrimSpace(e); trimmed != "" {
+			cfg.Excludes = append(cfg.Excludes, repo.ExcludePattern(trimmed))
 		}
 	}
 	cfg.MergeMethod = repo.MergeMethod(strings.TrimSpace(method))
