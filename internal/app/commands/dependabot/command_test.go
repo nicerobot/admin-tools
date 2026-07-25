@@ -27,6 +27,7 @@ func TestDependabotSweepCommand(t *testing.T) {
 			args: []string{"app", "dependabot-sweep"},
 			wantCfg: domain.Config{
 				Owners:      []repo.Owner{},
+				Excludes:    []repo.ExcludePattern{},
 				MergeMethod: repo.MergeMethodSquash,
 				RateFloor:   defaultRateFloor,
 			},
@@ -44,6 +45,7 @@ func TestDependabotSweepCommand(t *testing.T) {
 			},
 			wantCfg: domain.Config{
 				Owners:         []repo.Owner{"acme", "other"},
+				Excludes:       []repo.ExcludePattern{},
 				MergeMethod:    "rebase",
 				RateFloor:      50,
 				IsMajorAllowed: true,
@@ -56,6 +58,7 @@ func TestDependabotSweepCommand(t *testing.T) {
 			args: []string{"app", "dependabot-sweep", "--owner", "a", "--owner", "b", "--owner", "c"},
 			wantCfg: domain.Config{
 				Owners:      []repo.Owner{"a", "b", "c"},
+				Excludes:    []repo.ExcludePattern{},
 				MergeMethod: repo.MergeMethodSquash,
 				RateFloor:   defaultRateFloor,
 			},
@@ -67,9 +70,11 @@ func TestDependabotSweepCommand(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			want, must := assert.New(t), require.New(t)
 
-			origRun, origCfg, origOwners, origMethod := runAction, cfg, owners, method
-			t.Cleanup(func() { runAction, cfg, owners, method = origRun, origCfg, origOwners, origMethod })
-			cfg, owners, method = domain.Config{}, nil, string(repo.MergeMethodSquash)
+			origRun, origCfg, origOwners, origMethod, origExcl := runAction, cfg, owners, method, excludes
+			t.Cleanup(func() {
+				runAction, cfg, owners, method, excludes = origRun, origCfg, origOwners, origMethod, origExcl
+			})
+			cfg, owners, method, excludes = domain.Config{}, nil, string(repo.MergeMethodSquash), nil
 
 			var gotCfg domain.Config
 			runAction = func(_ context.Context, _ *slog.Logger, c domain.Config, _ ...string) (domain.Result, error) {
@@ -120,9 +125,11 @@ func TestBindOwnersTrimsWrappedYAMLScalars(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			want, must := assert.New(t), require.New(t)
 
-			origRun, origCfg, origOwners, origMethod := runAction, cfg, owners, method
-			t.Cleanup(func() { runAction, cfg, owners, method = origRun, origCfg, origOwners, origMethod })
-			cfg, owners, method = domain.Config{}, nil, string(repo.MergeMethodSquash)
+			origRun, origCfg, origOwners, origMethod, origExcl := runAction, cfg, owners, method, excludes
+			t.Cleanup(func() {
+				runAction, cfg, owners, method, excludes = origRun, origCfg, origOwners, origMethod, origExcl
+			})
+			cfg, owners, method, excludes = domain.Config{}, nil, string(repo.MergeMethodSquash), nil
 
 			var gotCfg domain.Config
 			runAction = func(_ context.Context, _ *slog.Logger, c domain.Config, _ ...string) (domain.Result, error) {
@@ -141,6 +148,70 @@ func TestBindOwnersTrimsWrappedYAMLScalars(t *testing.T) {
 			must.NoError(appCmd.Run(context.Background(), tt.args))
 			want.Equal(tt.want, gotCfg.Owners)
 			want.NotContains(string(gotCfg.MergeMethod), " ")
+		})
+	}
+}
+
+func TestBindExcludes(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []repo.ExcludePattern
+	}{
+		{
+			name: "repeatable flag",
+			args: []string{
+				"app", "dependabot-sweep", "--owner", "acme",
+				"--exclude", "acme/legacy.*", "--exclude", "acme/frozen.tool",
+			},
+			want: []repo.ExcludePattern{"acme/legacy.*", "acme/frozen.tool"},
+		},
+		{
+			name: "comma list from a folded YAML scalar is trimmed",
+			args: []string{
+				"app", "dependabot-sweep", "--owner", "acme",
+				"--exclude", "acme/legacy.*, acme/frozen.tool",
+			},
+			want: []repo.ExcludePattern{"acme/legacy.*", "acme/frozen.tool"},
+		},
+		{
+			name: "empty entries dropped, so a stray comma never yields a blank pattern",
+			args: []string{"app", "dependabot-sweep", "--owner", "acme", "--exclude", "a/b,, ,c/d"},
+			want: []repo.ExcludePattern{"a/b", "c/d"},
+		},
+		{
+			name: "absent flag yields an empty set, holding nothing",
+			args: []string{"app", "dependabot-sweep", "--owner", "acme"},
+			want: []repo.ExcludePattern{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			want, must := assert.New(t), require.New(t)
+
+			origRun, origCfg, origOwners, origMethod, origExcl := runAction, cfg, owners, method, excludes
+			t.Cleanup(func() {
+				runAction, cfg, owners, method, excludes = origRun, origCfg, origOwners, origMethod, origExcl
+			})
+			cfg, owners, method, excludes = domain.Config{}, nil, string(repo.MergeMethodSquash), nil
+
+			var gotCfg domain.Config
+			runAction = func(_ context.Context, _ *slog.Logger, c domain.Config, _ ...string) (domain.Result, error) {
+				gotCfg = c
+				return domain.Result{Pulls: []domain.PullResult{}}, nil
+			}
+
+			appCmd := &cli.Command{
+				Name:     "app",
+				Writer:   &bytes.Buffer{},
+				Commands: []*cli.Command{Command()},
+				Metadata: map[string]any{app.LoggerMetadataKey: slog.New(
+					slog.NewTextHandler(&bytes.Buffer{}, &slog.HandlerOptions{Level: slog.LevelWarn}))},
+			}
+
+			must.NoError(appCmd.Run(context.Background(), tt.args))
+			want.Equal(tt.want, gotCfg.Excludes)
 		})
 	}
 }

@@ -34,6 +34,7 @@ case "${command}" in
     # radm splits a comma-separated --owner value itself, so the owner list
     # passes through as one argument and no word splitting happens here.
     set -- --owner "${INPUT_SWEEP_OWNERS:?INPUT_SWEEP_OWNERS is required for dependabot-sweep}"
+    [ -n "${INPUT_SWEEP_EXCLUDES:-}" ] && set -- "$@" --exclude "${INPUT_SWEEP_EXCLUDES}"
     set -- "$@" --merge-method "${INPUT_SWEEP_MERGE_METHOD:-squash}"
     set -- "$@" --rate-floor "${INPUT_SWEEP_RATE_FLOOR:-200}"
     [ "${INPUT_SWEEP_ALLOW_MAJOR:-false}" = "true" ] && set -- "$@" --allow-major

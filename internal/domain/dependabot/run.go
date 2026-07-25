@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"path"
 
 	"github.com/nicerobot/tools.admin/internal/constants"
 	"github.com/nicerobot/tools.admin/internal/github"
@@ -25,6 +26,12 @@ const (
 	skipRefused    repo.SkipReason = "merge refused by GitHub"
 	skipFetch      repo.SkipReason = "pull request could not be fetched"
 )
+
+// excludedBy renders the skip reason for a held repository, naming the pattern
+// that held it so a sweep result says why, not merely that.
+func excludedBy(pattern repo.ExcludePattern) repo.SkipReason {
+	return repo.SkipReason("excluded by pattern " + string(pattern))
+}
 
 // PullResult is one pull request's outcome. Reason is empty exactly when the
 // pull request was merged.
@@ -133,6 +140,10 @@ func considerPull(d dependencies, cfg Config, owner repo.Owner, item github.Sear
 	if name == "" {
 		return declined(out, skipUnresolved)
 	}
+	// Checked before any per-pull request: a held repo costs the sweep nothing.
+	if pattern, held := excluded(cfg.Excludes, owner, name); held {
+		return declined(out, excludedBy(pattern))
+	}
 	pull, err := d.github.GetPullRequest(owner, name, repo.PullNumber(item.Number))
 	if err != nil {
 		return declined(out, skipFetch)
@@ -141,6 +152,23 @@ func considerPull(d dependencies, cfg Config, owner repo.Owner, item github.Sear
 		return declined(out, reason)
 	}
 	return merge(d, cfg, owner, name, out)
+}
+
+// excluded reports the first pattern holding owner/name, if any. A malformed
+// pattern never matches: path.Match's error is treated as no match, so a typo
+// silently widens nothing.
+func excluded(
+	patterns []repo.ExcludePattern,
+	owner repo.Owner,
+	name repo.Name,
+) (repo.ExcludePattern, bool) {
+	slug := string(owner) + "/" + string(name)
+	for _, pattern := range patterns {
+		if ok, err := path.Match(string(pattern), slug); err == nil && ok {
+			return pattern, true
+		}
+	}
+	return "", false
 }
 
 // gate applies every precondition in increasing order of cost: cheap local

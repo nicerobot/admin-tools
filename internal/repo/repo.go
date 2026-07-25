@@ -95,3 +95,9 @@ type MajorAllowed bool
 // RateFloor is the number of API requests the sweeper refuses to spend below,
 // so a sweep degrades into a reported early stop rather than rate-limit errors.
 type RateFloor int
+
+// ExcludePattern is an "owner/name" glob naming repositories a sweep must not
+// touch. It exists because an owner's _admin/manifest.yaml can hold a repo back
+// from automation, and a tool that enumerates repositories from the API alone
+// has no way to see that hold.
+type ExcludePattern string

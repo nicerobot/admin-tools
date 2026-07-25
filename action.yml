@@ -39,6 +39,10 @@ inputs:
     description: "Comma-separated owners to sweep for Dependabot pull requests"
     required: false
     default: ""
+  sweep-excludes:
+    description: "Comma-separated owner/name globs to skip (repos held in _admin/manifest.yaml)"
+    required: false
+    default: ""
   sweep-merge-method:
     description: "Merge strategy for swept pull requests: squash, merge, or rebase"
     required: false
@@ -72,6 +76,7 @@ runs:
     INPUT_CLEANUP_KEEP: ${{ inputs.cleanup-keep }}
     INPUT_CLEANUP_DRY_RUN: ${{ inputs.cleanup-dry-run }}
     INPUT_SWEEP_OWNERS: ${{ inputs.sweep-owners }}
+    INPUT_SWEEP_EXCLUDES: ${{ inputs.sweep-excludes }}
     INPUT_SWEEP_MERGE_METHOD: ${{ inputs.sweep-merge-method }}
     INPUT_SWEEP_RATE_FLOOR: ${{ inputs.sweep-rate-floor }}
     INPUT_SWEEP_ALLOW_MAJOR: ${{ inputs.sweep-allow-major }}
