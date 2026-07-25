@@ -12,6 +12,7 @@ import (
 	"github.com/nicerobot/tools.admin/internal/app"
 	"github.com/nicerobot/tools.admin/internal/app/commands/cleanupruns"
 	"github.com/nicerobot/tools.admin/internal/app/commands/createpr"
+	dependabotcmd "github.com/nicerobot/tools.admin/internal/app/commands/dependabot"
 	"github.com/nicerobot/tools.admin/internal/app/commands/snapshot"
 )
 
@@ -23,6 +24,7 @@ Available Commands:
   snapshot       - Snapshot live repo settings into per-repo settings override files
   create-pr      - Commit a snapshot onto a branch and open a pull request
   cleanup-runs   - Delete old GitHub Actions workflow runs
+  dependabot-sweep - Merge green, non-major Dependabot pull requests
 
 Each command renders a structured JSON result on stdout. Configuration comes from
 flags and the standard GitHub Actions environment (GH_TOKEN, GITHUB_API_URL,
@@ -86,6 +88,7 @@ func createApp(getLogger app.GetLoggerFunc) *cli.Command {
 			snapshot.Command(),
 			createpr.Command(),
 			cleanupruns.Command(),
+			dependabotcmd.Command(),
 		},
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
 			c.Root().Metadata[app.LoggerMetadataKey] = getLogger(c)

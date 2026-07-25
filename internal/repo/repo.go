@@ -65,3 +65,33 @@ type RunID int64
 
 // IsFork marks a repository as a fork.
 type IsFork bool
+
+// PullNumber is a pull-request number within a repository.
+type PullNumber int
+
+// Author is a pull-request author's login.
+type Author string
+
+// AuthorDependabot is the login Dependabot opens pull requests under.
+const AuthorDependabot Author = "dependabot[bot]"
+
+// MergeMethod is the strategy used to merge a pull request.
+type MergeMethod string
+
+// MergeMethodSquash collapses a pull request to a single commit on merge.
+const MergeMethodSquash MergeMethod = "squash"
+
+// SHA is a git commit identifier.
+type SHA string
+
+// SkipReason explains why the sweeper declined to merge a pull request. Every
+// skip carries one, so a sweep never silently drops work.
+type SkipReason string
+
+// MajorAllowed permits merging pull requests that cross a major version
+// boundary. It is false by fleet policy: major bumps await human review.
+type MajorAllowed bool
+
+// RateFloor is the number of API requests the sweeper refuses to spend below,
+// so a sweep degrades into a reported early stop rather than rate-limit errors.
+type RateFloor int

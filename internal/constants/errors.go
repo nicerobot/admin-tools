@@ -20,6 +20,11 @@ const (
 	ErrNoAuth errs.Const = "GH_TOKEN environment variable must be set"
 	// ErrNoTarget means cleanup-runs has no owner and GITHUB_REPOSITORY is unset.
 	ErrNoTarget errs.Const = "--owner is required when GITHUB_REPOSITORY is unset"
+	// ErrRateFloor means the sweep stopped because the API rate budget fell to
+	// the configured floor, leaving the remaining repos unswept.
+	ErrRateFloor errs.Const = "GitHub API rate budget exhausted; sweep stopped early"
+	// ErrNoOwners means the sweep was given no owners to walk.
+	ErrNoOwners errs.Const = "at least one --owner is required"
 	// ErrRemoveFile means a stale override file could not be removed.
 	ErrRemoveFile errs.Const = "failed to remove override file"
 	// ErrSettingsNotFound means the org settings.yml file is absent.
