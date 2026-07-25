@@ -109,3 +109,67 @@ func TestPadded(t *testing.T) {
 	t.Parallel()
 	assert.New(t).Equal("body\n", padded("body"))
 }
+
+func TestClassifyIgnoresEmbeddedReleaseNotes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		body string
+		want bump
+	}{
+		{
+			name: "upstream release notes carry foreign major bumps",
+			body: "Bumps [fast-uri](https://github.com/fastify/fast-uri) from 3.1.0 to 3.1.4.\n" +
+				"<details>\n<summary>Release notes</summary>\n" +
+				"<li>bump actions/checkout from 4 to 5</li>\n" +
+				"<li>bump actions/setup-node from 5 to 6</li>\n" +
+				"</details>\n",
+			want: bumpWithinMajor,
+		},
+		{
+			name: "grouped pull request keeps every dependency outside the blocks",
+			body: "Bumps undici and wrangler.\n\n" +
+				"Updates `undici` from 5.29.0 to 7.28.0\n" +
+				"<details><summary>notes</summary>irrelevant from 1.0.0 to 1.0.1</details>\n" +
+				"<br />\n\n" +
+				"Updates `wrangler` from 3.114.17 to 4.112.0\n" +
+				"<details><summary>notes</summary>more from 2.0.0 to 2.0.1</details>\n",
+			want: bumpMajor,
+		},
+		{
+			name: "nested blocks do not resume capture early",
+			body: "Bumps foo from 1.0.0 to 1.1.0.\n" +
+				"<details><summary>outer</summary>\n" +
+				"<details><summary>inner</summary>bump bar from 1 to 9</details>\n" +
+				"still inside from 2 to 8\n" +
+				"</details>\n",
+			want: bumpWithinMajor,
+		},
+		{
+			name: "unbalanced block drops the remainder rather than trusting it",
+			body: "Bumps foo from 1.0.0 to 1.1.0.\n<details>\nbump bar from 1 to 9\n",
+			want: bumpWithinMajor,
+		},
+		{
+			name: "body that is only an unclosed block yields no transition",
+			body: "<details>\nBumps foo from 1.0.0 to 2.0.0.\n",
+			want: bumpUnknown,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.New(t).Equal(tt.want, classify(pullBody(tt.body)))
+		})
+	}
+}
+
+func TestStripDetails(t *testing.T) {
+	t.Parallel()
+	want := assert.New(t)
+	want.Equal("keep", stripDetails("keep"), "a body with no blocks passes through untouched")
+	want.Equal("a\nb", stripDetails("a<details>gone</details>b"), "text on both sides survives, the block does not")
+	want.Equal("a", stripDetails("a<details>gone"), "an unclosed block drops its remainder")
+	want.NotContains(stripDetails("x<details>y<details>z</details>w</details>v"), "z")
+}
