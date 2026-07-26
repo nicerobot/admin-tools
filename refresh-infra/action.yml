@@ -72,13 +72,27 @@ runs:
         # injection — the summary derives from live zone config).
         DRIFT_SUMMARY: ${{ steps.detect.outputs.summary }}
       run: |
-        BRANCH="refresh-infra/$(date -u +%Y%m%dT%H%M%S)"
+        # One fixed branch, force-pushed. A timestamped branch per run opened a
+        # brand-new PR every week for the same unmerged drift — 91 of them
+        # accumulated across 7 repos before anyone noticed, because these PRs are
+        # authored by github-actions[bot] with no assignee or reviewer, so they
+        # notify nobody who is not watching the repo. One branch means one PR
+        # that keeps itself current instead of a pile that reports it once a week.
+        BRANCH='refresh-infra/drift'
         git config user.name 'github-actions[bot]'
         git config user.email 'github-actions[bot]@users.noreply.github.com'
-        git checkout -b "${BRANCH}"
+        git checkout -B "${BRANCH}"
         git add cloudflare/
         git commit -m "refresh: update cloudflare zone config from live state"
-        git push origin "${BRANCH}"
+        git push --force origin "${BRANCH}"
+
+        # An already-open PR tracks the branch, so the force-push above is the
+        # whole update — creating a second one would rebuild the pile.
+        if gh pr view "${BRANCH}" --json state --jq '.state' 2>/dev/null | grep -qx OPEN; then
+          echo "::notice::Updated existing drift PR for ${BRANCH}"
+          exit 0
+        fi
+
         gh pr create \
           --title "Refresh: Cloudflare config drift detected" \
           --body "$(cat <<PR_EOF
