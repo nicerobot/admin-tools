@@ -48,6 +48,10 @@ archives:
 dockers:
   - image_templates:
       - "ghcr.io/nicerobot/tools.admin:{{ .Tag }}"
+      # Moving major tag — what action.yml pins, matching the fleet convention
+      # (nicerobot/tools.build/ci/go:v2). Bumping the module's major means
+      # updating the pin in action.yml in the same change.
+      - "ghcr.io/nicerobot/tools.admin:v{{ .Major }}"
       - "ghcr.io/nicerobot/tools.admin:latest"
     dockerfile: Dockerfile
     goos: linux

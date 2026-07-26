@@ -63,8 +63,14 @@ runs:
   using: "docker"
   # Prebuilt image published by the release pipeline (goreleaser builds the radm
   # binary and the image from it at the same version). Consumers pull instead of
-  # rebuilding the Dockerfile every run. Pinned to the major tag.
-  image: "docker://ghcr.io/nicerobot/tools.admin:v3"
+  # rebuilding the Dockerfile every run. Pinned to the moving major tag goreleaser
+  # publishes, so every release refreshes it.
+  #
+  # Was :v3, a tag no pipeline ever produced — it had been pushed by hand, so the
+  # image stopped tracking main the moment that stopped happening. The module's
+  # tag series is v0.x, so the major tag is v0; bumping to v1 means changing this
+  # pin and .goreleaser.yml together.
+  image: "docker://ghcr.io/nicerobot/tools.admin:v0"
   env:
     INPUT_COMMAND: ${{ inputs.command }}
     INPUT_OWNER: ${{ inputs.owner }}
