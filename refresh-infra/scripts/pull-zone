@@ -21,6 +21,21 @@ CF_API='https://api.cloudflare.com/client/v4'
 CF_DIR='cloudflare'
 ZONE_YAML="${CF_DIR}/zone.yaml"
 
+# Zone settings tracked for drift. Deliberately a whitelist, not every setting:
+# the full list is ~100 entries, most of them plan-derived and read-only, whose
+# churn would bury real changes. Each name here is a valid {setting_id} for
+# PATCH /zones/{zone_id}/settings/{setting_id}, so settings.yaml doubles as the
+# apply intent — the file says exactly what to assert, in the API's own shape.
+TRACKED_SETTINGS=(
+  0rtt
+  always_use_https
+  automatic_https_rewrites
+  min_tls_version
+  security_header
+  ssl
+  tls_1_3
+)
+
 # Skip repos with no infrastructure
 [[ -f "${ZONE_YAML}" ]] || {
   printf >&3 '▸ %s not found — no infrastructure, skipping\n' "${ZONE_YAML}"
@@ -44,6 +59,22 @@ ZONE_ID="$(yq -r '.zone_id' "${ZONE_YAML}")"
 printf >&3 '▸ Pulling config for %s (%s)\n' "${ZONE}" "${ZONE_ID}"
 
 # --- Functions ---
+
+# Preflight. cf-api below deliberately swallows errors so that an absent
+# optional subresource (email routing, custom rulesets) reads as "none" rather
+# than aborting. That tolerance is wrong for a credential failure: every
+# endpoint then returns the empty fallback, pull-dns commits `records: []`, and
+# the action raises a PR deleting the entire mirror. Prove the token can read
+# the zone before any file is written.
+verify-access() {
+  local RESPONSE
+  RESPONSE="$(cf-api "/zones/${ZONE_ID}")"
+
+  [[ "$(jq -r '.success' <<<"${RESPONSE}")" = 'true' ]] || {
+    printf >&4 '✗ cannot read zone %s (%s) — check CF_READ_ONLY_API_TOKEN\n' "${ZONE}" "${ZONE_ID}"
+    exit 1
+  }
+}
 
 cf-api() {
   local ENDPOINT="${1}"
@@ -201,11 +232,48 @@ pull-email() {
   printf >&3 '  email.yaml: %s rules\n' "${RULE_COUNT}"
 }
 
+pull-settings() {
+  local RESPONSE
+  RESPONSE="$(cf-api "/zones/${ZONE_ID}/settings")"
+
+  local TRACKED
+  TRACKED="$(printf '%s\n' "${TRACKED_SETTINGS[@]}" | jq -Rsc 'split("\n") - [""]')"
+
+  local SETTING_COUNT
+  SETTING_COUNT="$(jq --argjson tracked "${TRACKED}" \
+    '[.result[]? | select(.id as $i | $tracked | index($i))] | length' <<<"${RESPONSE}")"
+
+  # Every zone has settings, so an empty result is an API failure, never a real
+  # state. Writing it would emit a drift PR that deletes the whole file.
+  ((SETTING_COUNT == 0)) && {
+    printf >&4 '  ✗ settings.yaml: no settings returned — keeping committed file\n'
+    return 0
+  }
+
+  # yq quotes exactly the scalars that would otherwise be misread — "1.3" as a
+  # float, "on"/"off" as YAML 1.1 booleans — and leaves the rest bare, matching
+  # the sibling zone/rules/email files byte for byte in style.
+  jq --arg zone "${ZONE}" --arg zone_id "${ZONE_ID}" --argjson tracked "${TRACKED}" '{
+      zone: $zone,
+      zone_id: $zone_id,
+      settings: [
+        .result[]
+        | select(.id as $i | $tracked | index($i))
+        | {key: .id, value: .value}
+      ] | sort_by(.key) | from_entries
+    }' <<<"${RESPONSE}" |
+    yq -P '.' >"${CF_DIR}/settings.yaml"
+
+  printf >&3 '  settings.yaml: %s settings\n' "${SETTING_COUNT}"
+}
+
 # --- Main ---
 
+verify-access
 pull-dns
 pull-rules
 pull-email
+pull-settings
 
 printf >&3 '  ✓ done\n'
 
