@@ -3,7 +3,7 @@ module github.com/nicerobot/tools.admin
 go 1.26.4
 
 require (
-	github.com/gomatic/go-error v0.3.7
+	github.com/gomatic/go-error v0.3.10
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v3 v3.10.1
 	gopkg.in/yaml.v3 v3.0.1
@@ -21,6 +21,6 @@ require (
 // Retracting them makes `go get` refuse the versions and stops them being
 // selected; removal from the mirror is a separate request to the Go team.
 retract (
-	v0.3.0 // published fleet owner and account names
 	v0.4.0 // published fleet owner and account names
+	v0.3.0 // published fleet owner and account names
 )
