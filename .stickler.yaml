@@ -5,10 +5,18 @@ config:
         gosec:
           excludes: { add: [G204] }   # subprocess command names are internal constants (git, gh, the binary), never user input
 
-# Soft-finding baselines: the number of non-gating findings this repository
+# Soft-finding baselines: how many non-gating findings this repository
 # currently carries, per rule. This is a RATCHET — the counts may only fall.
-# Raising one is a deliberate, reviewable decision; lowering one is progress.
-# A rule absent here is permitted zero.
+# Exceeding one fails the build and names the rule; a rule absent here is
+# permitted zero. Raising a number is a deliberate, reviewable decision.
+#
+# yze/invariant and yze/filesize are permanent probes (judgment-bound).
+# yze/errtest, yze/errtested and yze/testfile are HARD rules softened only
+# for rollout: they were structurally inert until the suite driver began
+# loading test files, and return to gating once their counts reach zero.
 soft-baseline:
+  yze/errtest: 2
+  yze/errtested: 1
   yze/filesize: 4
   yze/invariant: 11
+  yze/testfile: 3
