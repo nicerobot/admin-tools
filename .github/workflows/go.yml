@@ -24,3 +24,27 @@ jobs:
         with:
           persist-credentials: false
       - uses: nicerobot/tools.build/ci/go@v2
+
+  # Early warning, NOT a gate. The `go` job above is the gate, and it pins the
+  # toolchain via the ci/go@v2 image so every repo compiles identically. This job
+  # runs the same tests against Go tip on the schedule only, so a stdlib
+  # behavior change lands as a notification weeks before the next minor makes it
+  # a fleet-wide breakage. It is allowed to fail by design — tip breaks for
+  # reasons that are not ours — so it must never block a push or a merge.
+  #
+  # This is the ONLY place continue-on-error is legitimate in this workflow:
+  # putting it on the real gate would silence findings, which is forbidden.
+  go-next:
+    if: github.event_name == 'schedule' && github.event.repository.fork == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+          check-latest: true
+      - run: go test -shuffle=on ./...
