@@ -15,6 +15,7 @@ config:
 # for rollout: they were structurally inert until the suite driver began
 # loading test files, and return to gating once their counts reach zero.
 soft-baseline:
+  exhaustive: 2
   yze/errtest: 2
   yze/errtested: 1
   yze/filesize: 4
