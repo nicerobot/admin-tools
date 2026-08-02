@@ -19,7 +19,7 @@ config:
 # matching soft entry is inert — the rule stays hard and fails on its first
 # finding whatever number is recorded beside it.
 soft:
-  - yze/cliopinion
+  - yze/clidomain
   - exhaustive
   - yze/errtest
   - yze/errtested
@@ -28,7 +28,7 @@ soft:
   - yze/testfile
 
 soft-baseline:
-  yze/cliopinion: 4
+  yze/clidomain: 4
   exhaustive: 1
   yze/errtest: 2
   yze/errtested: 1
