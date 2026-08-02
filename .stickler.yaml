@@ -14,6 +14,19 @@ config:
 # yze/errtest, yze/errtested and yze/testfile are HARD rules softened only
 # for rollout: they were structurally inert until the suite driver began
 # loading test files, and return to gating once their counts reach zero.
+# `soft:` is what makes a rule non-gating; `soft-baseline:` is only the
+# per-rule ceiling APPLIED TO the rules named here. A baseline without a
+# matching soft entry is inert — the rule stays hard and fails on its first
+# finding whatever number is recorded beside it.
+soft:
+  - yze/cliopinion
+  - exhaustive
+  - yze/errtest
+  - yze/errtested
+  - yze/filesize
+  - yze/invariant
+  - yze/testfile
+
 soft-baseline:
   yze/cliopinion: 4
   exhaustive: 2
