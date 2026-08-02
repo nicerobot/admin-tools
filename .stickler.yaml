@@ -29,7 +29,7 @@ soft:
 
 soft-baseline:
   yze/cliopinion: 4
-  exhaustive: 2
+  exhaustive: 1
   yze/errtest: 2
   yze/errtested: 1
   yze/filesize: 4
