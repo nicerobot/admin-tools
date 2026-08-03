@@ -102,7 +102,7 @@ func TestBeforeHookSetsLogger(t *testing.T) {
 	appCmd := createApp(func(*cli.Command) *slog.Logger { return logger })
 	appCmd.Writer = &bytes.Buffer{}
 
-	_ = appCmd.Run(context.Background(), []string{"radm", "snapshot", "--owner", "x", "--settings-path", t.TempDir()})
+	_ = appCmd.Run(context.Background(), []string{"radm", "snapshot", "--settings-path", t.TempDir(), "x"})
 
 	want.Same(logger, appCmd.Metadata[app.LoggerMetadataKey])
 }

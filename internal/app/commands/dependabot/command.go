@@ -68,33 +68,39 @@ func Command() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringSliceFlag{
 				Name:        ownerFlag,
+				Sources:     cli.EnvVars("RADM_OWNER"),
 				Usage:       "GitHub user or organization to sweep (repeatable)",
 				Destination: &owners,
 			},
 			&cli.StringSliceFlag{
 				Name:        excludeFlag,
+				Sources:     cli.EnvVars("RADM_EXCLUDE"),
 				Usage:       "Skip repositories matching this owner/name glob (repeatable)",
 				Destination: &excludes,
 			},
 			&cli.StringFlag{
 				Name:        methodFlag,
+				Sources:     cli.EnvVars("RADM_MERGE_METHOD"),
 				Usage:       "Merge strategy: squash, merge, or rebase",
 				Value:       string(repo.MergeMethodSquash),
 				Destination: &method,
 			},
 			&cli.IntFlag{
 				Name:        rateFloorFlag,
+				Sources:     cli.EnvVars("RADM_RATE_FLOOR"),
 				Usage:       "Stop sweeping once fewer than N API requests remain",
 				Value:       defaultRateFloor,
 				Destination: (*int)(&cfg.RateFloor),
 			},
 			&cli.BoolFlag{
 				Name:        allowMajorFlag,
+				Sources:     cli.EnvVars("RADM_ALLOW_MAJOR"),
 				Usage:       "Also merge major version bumps (off by fleet policy)",
 				Destination: (*bool)(&cfg.IsMajorAllowed),
 			},
 			&cli.BoolFlag{
 				Name:        dryRunFlag,
+				Sources:     cli.EnvVars("RADM_DRY_RUN"),
 				Usage:       "Report what would be merged without merging",
 				Destination: (*bool)(&cfg.IsDryRun),
 			},

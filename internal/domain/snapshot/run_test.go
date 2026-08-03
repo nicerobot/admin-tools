@@ -111,7 +111,7 @@ func (h *harness) run(t *testing.T, owner repo.Owner) (Result, error) {
 	t.Helper()
 	h.install(t)
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
-	return Run(context.Background(), logger, Config{Owner: owner, SettingsPath: ".github"})
+	return Run(context.Background(), logger, Config{SettingsPath: ".github"}, string(owner))
 }
 
 func matchingRepo(name string) github.Repository {
@@ -307,6 +307,18 @@ func TestRunBuildsDepsError(t *testing.T) {
 	t.Cleanup(func() { deps = orig })
 	deps = func() (dependencies, error) { return dependencies{}, constants.ErrNoAuth.With(nil) }
 	logger := slog.New(slog.NewTextHandler(&strings.Builder{}, nil))
-	_, err := Run(context.Background(), logger, Config{Owner: "x", SettingsPath: ".github"})
+	_, err := Run(context.Background(), logger, Config{SettingsPath: ".github"}, "x")
 	require.ErrorIs(t, err, constants.ErrNoAuth)
+}
+
+// TestMissingOwnerArgument proves a Run with no positional owner fails with
+// ErrMissingArgument before deps() is consulted: deps is stubbed to fail with
+// ErrNoAuth, yet the missing-argument sentinel is what surfaces.
+func TestMissingOwnerArgument(t *testing.T) {
+	orig := deps
+	t.Cleanup(func() { deps = orig })
+	deps = func() (dependencies, error) { return dependencies{}, constants.ErrNoAuth.With(nil) }
+	logger := slog.New(slog.NewTextHandler(&strings.Builder{}, nil))
+	_, err := Run(context.Background(), logger, Config{SettingsPath: ".github"})
+	require.ErrorIs(t, err, constants.ErrMissingArgument)
 }

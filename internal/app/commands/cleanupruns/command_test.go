@@ -67,3 +67,36 @@ func TestCleanupRunsCommand(t *testing.T) {
 		})
 	}
 }
+
+// TestCleanupRunsEnvBindings proves every flag binds its RADM_* environment
+// variable: with no flags on the command line, the env values land in the
+// domain Config.
+func TestCleanupRunsEnvBindings(t *testing.T) {
+	want, must := assert.New(t), require.New(t)
+
+	t.Setenv("RADM_OWNER", "envorg")
+	t.Setenv("RADM_REPO", "envrepo")
+	t.Setenv("RADM_DAYS", "11")
+	t.Setenv("RADM_KEEP", "3")
+	t.Setenv("RADM_DRY_RUN", "true")
+
+	origRun, origCfg := runAction, cfg
+	t.Cleanup(func() { runAction, cfg = origRun, origCfg })
+
+	var gotCfg domain.Config
+	runAction = func(_ context.Context, _ *slog.Logger, c domain.Config, _ ...string) (domain.Result, error) {
+		gotCfg = c
+		return domain.Result{}, nil
+	}
+
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	appCmd := &cli.Command{
+		Name:     "app",
+		Writer:   &bytes.Buffer{},
+		Commands: []*cli.Command{Command()},
+		Metadata: map[string]any{app.LoggerMetadataKey: logger},
+	}
+
+	must.NoError(appCmd.Run(context.Background(), []string{"app", "cleanup-runs"}))
+	want.Equal(domain.Config{Owner: "envorg", Repo: "envrepo", Days: 11, Keep: 3, IsDryRun: true}, gotCfg)
+}

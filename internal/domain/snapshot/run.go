@@ -64,33 +64,47 @@ func osDeps() (dependencies, error) {
 }
 
 // Run executes the snapshot command, returning a structured Result the app tier
-// renders. It orchestrates the implementation packages and holds no presentation
-// logic.
-func Run(_ context.Context, logger *slog.Logger, cfg Config, _ ...domain.Argument) (Result, error) {
+// renders. The owner is the first positional argument; a missing owner is
+// ErrMissingArgument. Run orchestrates the implementation packages and holds no
+// presentation logic.
+func Run(_ context.Context, logger *slog.Logger, cfg Config, args ...domain.Argument) (Result, error) {
+	owner, err := ownerFrom(args)
+	if err != nil {
+		return Result{}, err
+	}
 	d, err := deps()
 	if err != nil {
 		return Result{}, err
 	}
-	return run(d, logger, cfg)
+	return run(d, logger, cfg, owner)
 }
 
-func run(d dependencies, logger *slog.Logger, cfg Config) (Result, error) {
+// ownerFrom extracts the owner from the first positional argument, reporting
+// ErrMissingArgument when none was supplied.
+func ownerFrom(args []domain.Argument) (repo.Owner, error) {
+	if len(args) == 0 {
+		return "", constants.ErrMissingArgument.With(nil, "owner")
+	}
+	return repo.Owner(args[0]), nil
+}
+
+func run(d dependencies, logger *slog.Logger, cfg Config, owner repo.Owner) (Result, error) {
 	s, err := settings.Load(d.readFile, cfg.SettingsPath)
 	if err != nil {
 		return Result{}, err
 	}
-	at, err := d.github.GetAccountType(cfg.Owner)
+	at, err := d.github.GetAccountType(owner)
 	if err != nil {
 		return Result{}, err
 	}
-	repos, err := d.github.ListRepos(cfg.Owner)
+	repos, err := d.github.ListRepos(owner)
 	if err != nil {
 		return Result{}, err
 	}
 	source := commentSource(at)
 	reposDir := overrides.ReposDir(filepath.Join(string(cfg.SettingsPath), "repos"))
-	files, live := computeFiles(repos, s.Repository, cfg.Owner, source)
-	gone, err := verifyStale(d, cfg.Owner, reposDir, live)
+	files, live := computeFiles(repos, s.Repository, owner, source)
+	gone, err := verifyStale(d, owner, reposDir, live)
 	if err != nil {
 		return Result{}, err
 	}
@@ -98,8 +112,8 @@ func run(d dependencies, logger *slog.Logger, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	logger.Info("Snapshot complete.", "owner", cfg.Owner, "wrote", len(wrote), "removed", len(removed))
-	return Result{Owner: string(cfg.Owner), CommentSource: string(source), Wrote: wrote, Removed: removed}, nil
+	logger.Info("Snapshot complete.", "owner", owner, "wrote", len(wrote), "removed", len(removed))
+	return Result{Owner: string(owner), CommentSource: string(source), Wrote: wrote, Removed: removed}, nil
 }
 
 func commentSource(at repo.AccountType) repo.CommentSource {

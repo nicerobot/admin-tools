@@ -38,7 +38,6 @@ soft-baseline:
   # testfile, clidomain, cliflags, clilayout, fuzzreq, exhaustive) gate
   # again at zero.
   exhaustive: 1
-  yze/cliflags: 20
   yze/errtest: 2
   yze/errtested: 1
   yze/filesize: 4

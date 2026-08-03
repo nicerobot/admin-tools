@@ -61,7 +61,7 @@ func TestIntegration_SnapshotWritesOverrides(t *testing.T) {
 
 	err := appCmd.Run(
 		context.Background(),
-		[]string{"app", "snapshot", "--owner", "acme", "--settings-path", settingsDir},
+		[]string{"app", "snapshot", "--settings-path", settingsDir, "acme"},
 	)
 	must.NoError(err)
 

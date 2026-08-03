@@ -48,28 +48,35 @@ func Command() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:        ownerFlag,
+				Sources:     cli.EnvVars("RADM_OWNER"),
+				Value:       "",
 				Usage:       "GitHub user or organization (default: current repo from GITHUB_REPOSITORY)",
 				Destination: (*string)(&cfg.Owner),
 			},
 			&cli.StringFlag{
 				Name:        repoFlag,
+				Sources:     cli.EnvVars("RADM_REPO"),
+				Value:       "",
 				Usage:       "Single repo (omit for all repos)",
 				Destination: (*string)(&cfg.Repo),
 			},
 			&cli.IntFlag{
 				Name:        daysFlag,
+				Sources:     cli.EnvVars("RADM_DAYS"),
 				Usage:       "Delete runs older than N days",
 				Value:       defaultDays,
 				Destination: (*int)(&cfg.Days),
 			},
 			&cli.IntFlag{
 				Name:        keepFlag,
+				Sources:     cli.EnvVars("RADM_KEEP"),
 				Usage:       "Keep at least N runs per workflow",
 				Value:       defaultKeep,
 				Destination: (*int)(&cfg.Keep),
 			},
 			&cli.BoolFlag{
 				Name:        dryRunFlag,
+				Sources:     cli.EnvVars("RADM_DRY_RUN"),
 				Usage:       "Print what would be deleted without deleting",
 				Destination: (*bool)(&cfg.IsDryRun),
 			},

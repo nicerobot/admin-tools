@@ -9,9 +9,11 @@ command="${INPUT_COMMAND:?INPUT_COMMAND is required}"
 
 case "${command}" in
   snapshot)
+    # The owner is a positional argument; it goes last because flag parsing
+    # stops at the first non-flag argument.
     exec radm snapshot \
-      --owner "${INPUT_OWNER:?INPUT_OWNER is required for snapshot}" \
-      --settings-path "${INPUT_SETTINGS_PATH:-.github}"
+      --settings-path "${INPUT_SETTINGS_PATH:-.github}" \
+      "${INPUT_OWNER:?INPUT_OWNER is required for snapshot}"
     ;;
   create-pr)
     exec radm create-pr \

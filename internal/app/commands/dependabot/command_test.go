@@ -98,6 +98,50 @@ func TestDependabotSweepCommand(t *testing.T) {
 	}
 }
 
+// TestDependabotSweepEnvBindings proves every flag binds its RADM_* environment
+// variable: with no flags on the command line, the env values land in the
+// domain Config (slice flags split their env value on commas).
+func TestDependabotSweepEnvBindings(t *testing.T) {
+	want, must := assert.New(t), require.New(t)
+
+	t.Setenv("RADM_OWNER", "acme,other")
+	t.Setenv("RADM_EXCLUDE", "acme/legacy.*")
+	t.Setenv("RADM_MERGE_METHOD", "rebase")
+	t.Setenv("RADM_RATE_FLOOR", "50")
+	t.Setenv("RADM_ALLOW_MAJOR", "true")
+	t.Setenv("RADM_DRY_RUN", "true")
+
+	origRun, origCfg, origOwners, origMethod, origExcl := runAction, cfg, owners, method, excludes
+	t.Cleanup(func() {
+		runAction, cfg, owners, method, excludes = origRun, origCfg, origOwners, origMethod, origExcl
+	})
+	cfg, owners, method, excludes = domain.Config{}, nil, string(repo.MergeMethodSquash), nil
+
+	var gotCfg domain.Config
+	runAction = func(_ context.Context, _ *slog.Logger, c domain.Config, _ ...string) (domain.Result, error) {
+		gotCfg = c
+		return domain.Result{Pulls: []domain.PullResult{}}, nil
+	}
+
+	appCmd := &cli.Command{
+		Name:     "app",
+		Writer:   &bytes.Buffer{},
+		Commands: []*cli.Command{Command()},
+		Metadata: map[string]any{app.LoggerMetadataKey: slog.New(
+			slog.NewTextHandler(&bytes.Buffer{}, &slog.HandlerOptions{Level: slog.LevelWarn}))},
+	}
+
+	must.NoError(appCmd.Run(context.Background(), []string{"app", "dependabot-sweep"}))
+	want.Equal(domain.Config{
+		Owners:         []repo.Owner{"acme", "other"},
+		Excludes:       []repo.ExcludePattern{"acme/legacy.*"},
+		MergeMethod:    "rebase",
+		RateFloor:      50,
+		IsMajorAllowed: true,
+		IsDryRun:       true,
+	}, gotCfg)
+}
+
 func TestBindOwnersTrimsWrappedYAMLScalars(t *testing.T) {
 	tests := []struct {
 		name string

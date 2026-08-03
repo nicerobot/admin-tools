@@ -46,18 +46,21 @@ func Command() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:        settingsPathFlag,
+				Sources:     cli.EnvVars("RADM_SETTINGS_PATH"),
 				Usage:       "Path to settings directory",
 				Value:       defaultSettingsPath,
 				Destination: (*string)(&cfg.SettingsPath),
 			},
 			&cli.StringFlag{
 				Name:        branchFlag,
+				Sources:     cli.EnvVars("RADM_BRANCH"),
 				Usage:       "Branch name",
 				Value:       defaultBranch,
 				Destination: (*string)(&cfg.Branch),
 			},
 			&cli.StringFlag{
 				Name:        baseFlag,
+				Sources:     cli.EnvVars("RADM_BASE"),
 				Usage:       "Base branch",
 				Value:       defaultBase,
 				Destination: (*string)(&cfg.Base),

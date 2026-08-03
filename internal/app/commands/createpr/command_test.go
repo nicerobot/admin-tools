@@ -72,3 +72,34 @@ func TestCreatePRCommand(t *testing.T) {
 		})
 	}
 }
+
+// TestCreatePREnvBindings proves every flag binds its RADM_* environment
+// variable: with no flags on the command line, the env values land in the
+// domain Config.
+func TestCreatePREnvBindings(t *testing.T) {
+	want, must := assert.New(t), require.New(t)
+
+	t.Setenv("RADM_SETTINGS_PATH", ".envgh")
+	t.Setenv("RADM_BRANCH", "env/branch")
+	t.Setenv("RADM_BASE", "envbase")
+
+	origRun, origCfg := runAction, cfg
+	t.Cleanup(func() { runAction, cfg = origRun, origCfg })
+
+	var gotCfg domain.Config
+	runAction = func(_ context.Context, _ *slog.Logger, c domain.Config, _ ...string) (domain.Result, error) {
+		gotCfg = c
+		return domain.Result{}, nil
+	}
+
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	appCmd := &cli.Command{
+		Name:     "app",
+		Writer:   &bytes.Buffer{},
+		Commands: []*cli.Command{Command()},
+		Metadata: map[string]any{app.LoggerMetadataKey: logger},
+	}
+
+	must.NoError(appCmd.Run(context.Background(), []string{"app", "create-pr"}))
+	want.Equal(domain.Config{SettingsPath: ".envgh", Branch: "env/branch", Base: "envbase"}, gotCfg)
+}

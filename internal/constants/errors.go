@@ -16,6 +16,8 @@ const (
 	ErrInvalidValue errs.Const = "invalid value"
 	// ErrListRepoFiles means the repos directory could not be listed.
 	ErrListRepoFiles errs.Const = "failed to list repo files"
+	// ErrMissingArgument means a required positional argument was not supplied.
+	ErrMissingArgument errs.Const = "missing required argument"
 	// ErrNoAuth means the GH_TOKEN environment variable is unset.
 	ErrNoAuth errs.Const = "GH_TOKEN environment variable must be set"
 	// ErrNoTarget means cleanup-runs has no owner and GITHUB_REPOSITORY is unset.
