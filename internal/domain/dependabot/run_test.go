@@ -297,6 +297,34 @@ func TestGateBumpNeverMergesBumpUnknownEvenWithAllowMajor(t *testing.T) {
 	want.Empty(gh.merges)
 }
 
+// TestGateBumpNeverMergesBumpNotForwardEvenWithAllowMajor pins the direction
+// half of the policy end to end, with the body that motivated it: a proposal to
+// replace a floating internal action reference with a pinned version reads as a
+// within-major bump, passes every check, and would have merged a fleet-wide CI
+// downgrade. Allowing major bumps does not relax it — consent to move a major
+// is not consent to move backwards.
+func TestGateBumpNeverMergesBumpNotForwardEvenWithAllowMajor(t *testing.T) {
+	want, must := assert.New(t), require.New(t)
+
+	gh := &fakeGH{
+		remaining: 100,
+		items:     []github.SearchItem{item(1)},
+		pulls: map[string]github.PullRequest{"widget": {
+			Body: "Bumps [nicerobot/tools.build](https://github.com/nicerobot/tools.build) " +
+				"from 2 to 2.6.1 in the github-actions group\n",
+			Head: github.CommitRef{SHA: "abc"},
+		}},
+		checks: map[string][]github.CheckRun{"widget": passing("go")},
+	}
+	cfg := baseCfg()
+	cfg.IsMajorAllowed = true
+
+	result, err := sweep(t, gh, cfg)
+	must.NoError(err)
+	want.Equal(string(skipNotForward), result.Pulls[0].Reason)
+	want.Empty(gh.merges, "a downgrade proposed as an update is never merged")
+}
+
 func TestRunStopsAtRateFloor(t *testing.T) {
 	want, must := assert.New(t), require.New(t)
 

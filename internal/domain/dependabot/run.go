@@ -18,6 +18,7 @@ import (
 const (
 	skipMajor      repo.SkipReason = "major version bump; awaiting review"
 	skipUnknown    repo.SkipReason = "version transition could not be parsed"
+	skipNotForward repo.SkipReason = "version transition does not provably move forward"
 	skipDraft      repo.SkipReason = "pull request is a draft"
 	skipPending    repo.SkipReason = "checks still running"
 	skipFailing    repo.SkipReason = "checks not passing"
@@ -191,13 +192,18 @@ func gate(
 }
 
 // gateBump enforces the semver policy: major bumps await human review unless
-// explicitly allowed, and an unparseable transition is never merged.
+// explicitly allowed, an unparseable transition is never merged, and neither is
+// one that cannot be shown to move forward — staying inside a major says
+// nothing about direction, and a downgrade proposed as an update merges just as
+// quietly as a real one.
 func gateBump(cfg Config, body pullBody) (repo.SkipReason, bool) {
 	switch classify(body) {
 	case bumpWithinMajor:
 		return "", true
 	case bumpMajor:
 		return skipMajor, bool(cfg.IsMajorAllowed)
+	case bumpNotForward:
+		return skipNotForward, false
 	case bumpUnknown:
 		// Named rather than left to the default: an unjudgeable transition is
 		// declined deliberately, and so is any classification a later member

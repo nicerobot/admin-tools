@@ -2,6 +2,7 @@ package dependabot
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -13,7 +14,13 @@ import (
 //
 // A grouped pull request repeats the line once per dependency, so a single body
 // yields every transition the merge would apply.
-var transitionRe = regexp.MustCompile(`from ([0-9][^\s]*?) to ([0-9][^\s]*?)[\s.,)]`)
+//
+// Each version runs to whitespace and is then trimmed of sentence punctuation
+// by [trimmed]. Matching lazily up to a delimiter instead would stop at the
+// version's OWN first dot — "to 1.2.0." yields "1", which silently reduced
+// every comparison here to leading digits and left the real target version
+// unread.
+var transitionRe = regexp.MustCompile(`from ([0-9]\S*) to ([0-9]\S*)`)
 
 // pullBody is the prose of a Dependabot pull request, the sole reliable source
 // of its version transitions. The commit trailer carries dependency-name and
@@ -32,21 +39,114 @@ const (
 	bumpWithinMajor
 	// bumpMajor means at least one transition crosses a major boundary.
 	bumpMajor
+	// bumpNotForward means at least one transition is not provably a move
+	// forward: it goes backward, stands still, or starts from a reference that
+	// cannot be ordered at all. Staying inside a major says nothing about
+	// direction, so this is classified apart from it.
+	bumpNotForward
 )
 
 // classify reports the largest bump the body describes. A body with no parseable
 // transition is bumpUnknown: unjudgeable is never treated as safe.
+//
+// Crossing a major boundary outranks direction, because a major bump is the
+// louder fact and is already gated behind explicit consent; among transitions
+// that stay inside their major, one that does not provably move forward
+// condemns the whole pull request.
 func classify(body pullBody) bump {
 	matches := transitionRe.FindAllStringSubmatch(padded(pullBody(stripDetails(body))), -1)
 	if len(matches) == 0 {
 		return bumpUnknown
 	}
+	result := bumpWithinMajor
 	for _, m := range matches {
-		if majorOf(version(m[1])) != majorOf(version(m[2])) {
+		from, to := trimmed(capture(m[1])), trimmed(capture(m[2]))
+		if majorOf(from) != majorOf(to) {
 			return bumpMajor
 		}
+		if !movesForward(from, to) {
+			result = bumpNotForward
+		}
 	}
-	return bumpWithinMajor
+	return result
+}
+
+// movesForward reports whether a transition provably advances.
+//
+// Both sides must be COMPLETE versions. A bare major like "2" is not a version
+// but a floating reference — the fleet's own CI actions are pinned that way, so
+// the tag is moved to each release and "2" may already denote something newer
+// than any fixed version the prose names. Ordering it against "2.6.1" would
+// read the string as smaller and call a downgrade an upgrade — the way a
+// proposal to pin an up-to-date float passes for progress. Nothing about
+// the current target is derivable from the body, so an incomplete side is
+// declared unorderable and declined rather than guessed at.
+func movesForward(from, to version) bool {
+	before, ok := complete(from)
+	if !ok {
+		return false
+	}
+	after, ok := complete(to)
+	if !ok {
+		return false
+	}
+	return precedes(before, after)
+}
+
+// release is a version's ordered form: its numeric components, most
+// significant first, and whether a pre-release suffix follows them.
+type release struct {
+	components   []int
+	isPrerelease bool
+}
+
+// complete parses a version into its ordered form, reporting false unless all
+// three of major, minor and patch are present and numeric. Build metadata is
+// discarded — semver excludes it from precedence entirely.
+func complete(v version) (release, bool) {
+	withoutBuild, _, _ := strings.Cut(string(v), "+")
+	numbers, pre, hasPre := strings.Cut(withoutBuild, "-")
+	fields := strings.Split(numbers, ".")
+	if len(fields) != 3 {
+		return release{}, false
+	}
+	parsed := make([]int, 0, len(fields))
+	for _, field := range fields {
+		number, err := strconv.Atoi(field)
+		if err != nil || number < 0 {
+			return release{}, false
+		}
+		parsed = append(parsed, number)
+	}
+	return release{components: parsed, isPrerelease: hasPre && pre != ""}, true
+}
+
+// precedes reports whether before sorts strictly earlier than after.
+//
+// Numeric components decide it whenever they differ. When they match, semver
+// puts a pre-release BEFORE the release it leads to (2.0.0-rc.1 precedes
+// 2.0.0), so shedding a suffix advances. Everything else at equal components —
+// the same version twice, a release regressing into a pre-release, or one
+// pre-release to another — is not an advance this gate will vouch for:
+// ordering pre-release identifiers is a rule of its own, and a transition that
+// needs it deserves a human rather than a guess.
+func precedes(before, after release) bool {
+	for i := range before.components {
+		if before.components[i] != after.components[i] {
+			return before.components[i] < after.components[i]
+		}
+	}
+	return before.isPrerelease && !after.isPrerelease
+}
+
+// capture is one version as the transition pattern matched it, sentence
+// punctuation and all.
+type capture string
+
+// trimmed reads a captured version, dropping the sentence punctuation that
+// follows it in prose ("to 1.2.0." and "to 1.2.0)" both name 1.2.0).
+func trimmed(captured capture) version {
+	return version(strings.TrimRight(string(captured), ".,);:"))
 }
 
 // padded appends a terminator so a transition ending at the very end of the
