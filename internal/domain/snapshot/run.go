@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/nicerobot/tools.admin/internal/constants"
+	"github.com/nicerobot/tools.admin/internal/domain"
 	"github.com/nicerobot/tools.admin/internal/github"
 	"github.com/nicerobot/tools.admin/internal/overrides"
 	"github.com/nicerobot/tools.admin/internal/repo"
@@ -65,7 +66,7 @@ func osDeps() (dependencies, error) {
 // Run executes the snapshot command, returning a structured Result the app tier
 // renders. It orchestrates the implementation packages and holds no presentation
 // logic.
-func Run(_ context.Context, logger *slog.Logger, cfg Config, _ ...string) (Result, error) {
+func Run(_ context.Context, logger *slog.Logger, cfg Config, _ ...domain.Argument) (Result, error) {
 	d, err := deps()
 	if err != nil {
 		return Result{}, err

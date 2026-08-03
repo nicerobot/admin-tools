@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"path/filepath"
 
+	"github.com/nicerobot/tools.admin/internal/domain"
 	"github.com/nicerobot/tools.admin/internal/gitcmd"
 	"github.com/nicerobot/tools.admin/internal/repo"
 )
@@ -55,7 +56,7 @@ func osDeps() dependencies {
 
 // Run executes the create-pr command, returning a structured Result the app tier
 // renders. It orchestrates the gitcmd package and holds no presentation logic.
-func Run(_ context.Context, logger *slog.Logger, cfg Config, _ ...string) (Result, error) {
+func Run(_ context.Context, logger *slog.Logger, cfg Config, _ ...domain.Argument) (Result, error) {
 	return run(deps(), logger, cfg)
 }
 

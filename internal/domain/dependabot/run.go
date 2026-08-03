@@ -8,6 +8,7 @@ import (
 	"path"
 
 	"github.com/nicerobot/tools.admin/internal/constants"
+	"github.com/nicerobot/tools.admin/internal/domain"
 	"github.com/nicerobot/tools.admin/internal/github"
 	"github.com/nicerobot/tools.admin/internal/repo"
 )
@@ -82,7 +83,7 @@ func osDeps() (dependencies, error) {
 }
 
 // Run executes the sweep, returning a structured Result the app tier renders.
-func Run(_ context.Context, logger *slog.Logger, cfg Config, _ ...string) (Result, error) {
+func Run(_ context.Context, logger *slog.Logger, cfg Config, _ ...domain.Argument) (Result, error) {
 	d, err := deps()
 	if err != nil {
 		return Result{}, err
