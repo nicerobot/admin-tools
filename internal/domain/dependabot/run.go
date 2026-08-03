@@ -198,6 +198,11 @@ func gateBump(cfg Config, body pullBody) (repo.SkipReason, bool) {
 		return "", true
 	case bumpMajor:
 		return skipMajor, bool(cfg.IsMajorAllowed)
+	case bumpUnknown:
+		// Named rather than left to the default: an unjudgeable transition is
+		// declined deliberately, and so is any classification a later member
+		// adds — a new bump kind must be judged here before it can be merged.
+		fallthrough
 	default:
 		return skipUnknown, false
 	}

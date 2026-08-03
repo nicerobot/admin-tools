@@ -132,6 +132,24 @@ func TestPrExistsExecError(t *testing.T) {
 	require.ErrorIs(t, err, constants.ErrCommand)
 }
 
+// TestServiceIsAnImmutableValueSafeToCopy pins the property Service documents.
+// A copy is taken, driven through a mutating-sounding operation, and the
+// original is then driven through the same one: both issue the identical
+// command, so neither carries per-instance state the other can disturb. A
+// pointer receiver or a mutable field would show up here as divergence between
+// the two invocations.
+func TestServiceIsAnImmutableValueSafeToCopy(t *testing.T) {
+	original, rec := newService(nil, nil)
+	copied := original
+
+	require.NoError(t, copied.CheckoutBranch("feature"))
+	require.NoError(t, original.CheckoutBranch("feature"))
+
+	require.Len(t, rec.calls, 2)
+	assert.Equal(t, rec.calls[0], rec.calls[1])
+	assert.Equal(t, []string{"git", "checkout", "-B", "feature"}, rec.calls[0])
+}
+
 func TestCreatePR(t *testing.T) {
 	svc, rec := newService(nil, nil)
 	require.NoError(t, svc.CreatePR("chore: snapshot", "Auto-generated.", "my-branch", "main"))

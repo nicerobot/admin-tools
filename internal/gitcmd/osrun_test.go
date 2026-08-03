@@ -13,21 +13,21 @@ import (
 
 func TestCommandAllowlist(t *testing.T) {
 	tests := []struct {
+		wantErr error
 		name    string
 		wantBin string
 		args    []string
-		wantErr bool
 	}{
 		{name: "git", args: []string{"git", "status"}, wantBin: "git"},
 		{name: "gh", args: []string{"gh", "pr", "list"}, wantBin: "gh"},
-		{name: "empty", args: nil, wantErr: true},
-		{name: "disallowed binary", args: []string{"rm", "-rf"}, wantErr: true},
+		{name: "empty", args: nil, wantErr: constants.ErrCommand},
+		{name: "disallowed binary", args: []string{"rm", "-rf"}, wantErr: constants.ErrCommand},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd, err := command(tt.args)
-			if tt.wantErr {
-				require.ErrorIs(t, err, constants.ErrCommand)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
 				return
 			}
 			require.NoError(t, err)

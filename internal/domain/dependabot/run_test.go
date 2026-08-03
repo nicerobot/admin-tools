@@ -71,11 +71,15 @@ func (f *fakeGH) RateRemaining() (repo.RateFloor, error) {
 }
 
 // item builds a search result for the canonical test repository.
-func item(number int) github.SearchItem {
+func item(number int) github.SearchItem { return itemFor("widget", number) }
+
+// itemFor builds a search result for a named repository under the test owner,
+// so one sweep can carry more than one repository's pull request.
+func itemFor(name string, number int) github.SearchItem {
 	return github.SearchItem{
-		RepositoryURL: "https://api.github.com/repos/acme/widget",
+		RepositoryURL: "https://api.github.com/repos/acme/" + name,
 		Number:        number,
-		Title:         "bump widget",
+		Title:         "bump " + name,
 	}
 }
 
@@ -108,9 +112,40 @@ func baseCfg() Config {
 	}
 }
 
-func TestRunRequiresOwners(t *testing.T) {
+// TestRunRequiresConfigOwners pins Config's documented requirement that Owners
+// is non-empty: a sweep with none refuses rather than quietly walking nothing.
+func TestRunRequiresConfigOwners(t *testing.T) {
 	_, err := sweep(t, &fakeGH{remaining: 100}, Config{})
 	assert.New(t).ErrorIs(err, constants.ErrNoOwners)
+}
+
+// TestPullResultReasonEmptyExactlyWhenMerged pins the biconditional PullResult
+// documents: a merged pull request carries no reason, and every declined one
+// carries the reason it was declined for. A single sweep exercises both sides,
+// so a change that stamps a reason onto a merge — or drops one from a skip —
+// fails here.
+func TestPullResultReasonEmptyExactlyWhenMerged(t *testing.T) {
+	want, must := assert.New(t), require.New(t)
+
+	gh := &fakeGH{
+		remaining: 100,
+		items:     []github.SearchItem{itemFor("widget", 1), itemFor("gadget", 2)},
+		pulls: map[string]github.PullRequest{
+			"widget": withinMajor(),
+			"gadget": {IsDraft: true, Body: "Bumps foo from 1.1.0 to 1.2.0."},
+		},
+		checks: map[string][]github.CheckRun{"widget": passing("go"), "gadget": passing("go")},
+	}
+
+	result, err := sweep(t, gh, baseCfg())
+	must.NoError(err)
+
+	must.Len(result.Pulls, 2)
+	want.Equal(1, result.Merged)
+	want.Equal(1, result.Skipped)
+	for _, pull := range result.Pulls {
+		want.Equal(pull.IsMerged, pull.Reason == "", "reason is empty exactly when merged: %+v", pull)
+	}
 }
 
 func TestRunMergesGreenWithinMajor(t *testing.T) {
@@ -241,7 +276,10 @@ func TestRunAllowMajorMergesMajorBump(t *testing.T) {
 	want.Len(gh.merges, 1)
 }
 
-func TestRunNeverMergesUnparseableEvenWithAllowMajor(t *testing.T) {
+// TestGateBumpNeverMergesBumpUnknownEvenWithAllowMajor pins what gateBump and
+// bumpUnknown both document: an unparseable transition is never merged, and
+// allowing major bumps does not relax that — "unjudgeable" is not "safe".
+func TestGateBumpNeverMergesBumpUnknownEvenWithAllowMajor(t *testing.T) {
 	want, must := assert.New(t), require.New(t)
 
 	gh := &fakeGH{
@@ -281,7 +319,22 @@ func TestRunRateErrorFailsSweep(t *testing.T) {
 	assert.New(t).ErrorIs(err, sentinel)
 }
 
-func TestRunRecordsSearchFailureAndContinues(t *testing.T) {
+// TestRunPropagatesHTTPStatusFromRateCheck pins that a GitHub failure during the
+// budget check aborts the sweep with the sentinel intact: it is neither
+// swallowed into a reported early stop nor rewritten into an opaque error, so a
+// caller can still tell an API failure from a spent budget.
+func TestRunPropagatesHTTPStatusFromRateCheck(t *testing.T) {
+	want, must := assert.New(t), require.New(t)
+
+	result, err := sweep(t, &fakeGH{rateErr: constants.ErrHTTPStatus.With(nil, "status", 403)}, baseCfg())
+
+	must.Error(err)
+	want.ErrorIs(err, constants.ErrHTTPStatus)
+	want.False(result.IsStoppedEarly)
+	want.Equal(0, result.OwnersScanned)
+}
+
+func TestSweepOwnerRecordsSearchFailureAndContinues(t *testing.T) {
 	want, must := assert.New(t), require.New(t)
 
 	gh := &fakeGH{remaining: 100, searchErr: errors.New("search exploded")}

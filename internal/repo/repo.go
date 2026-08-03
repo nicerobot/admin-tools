@@ -84,8 +84,10 @@ const MergeMethodSquash MergeMethod = "squash"
 // SHA is a git commit identifier.
 type SHA string
 
-// SkipReason explains why the sweeper declined to merge a pull request. Every
-// skip carries one, so a sweep never silently drops work.
+// SkipReason explains why the sweeper declined to merge a pull request. The
+// type is inert vocabulary; the contract about which results carry one belongs
+// to the sweep that stamps them, where PullResult states it and dependabot's
+// tests pin it.
 type SkipReason string
 
 // MajorAllowed permits merging pull requests that cross a major version
@@ -96,8 +98,10 @@ type MajorAllowed bool
 // so a sweep degrades into a reported early stop rather than rate-limit errors.
 type RateFloor int
 
-// ExcludePattern is an "owner/name" glob naming repositories a sweep must not
-// touch. It exists because an owner's _admin/manifest.yaml can hold a repo back
-// from automation, and a tool that enumerates repositories from the API alone
-// has no way to see that hold.
+// ExcludePattern is an "owner/name" glob naming repositories a sweep leaves
+// untouched. It exists because an owner's _admin/manifest.yaml can hold a repo
+// back from automation, and a tool that enumerates repositories from the API
+// alone has no way to see that hold. The type is inert vocabulary; the matching
+// and the skipping it drives live in the sweep, where dependabot's tests pin
+// them.
 type ExcludePattern string

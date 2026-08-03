@@ -484,6 +484,70 @@ func TestNewFromEnv(t *testing.T) {
 	})
 }
 
+// closeRecorder is a response body that records having been closed.
+type closeRecorder struct {
+	io.Reader
+	closed bool
+}
+
+func (c *closeRecorder) Close() error {
+	c.closed = true
+	return nil
+}
+
+// TestResponseBodyIsClosedBeforeReturning pins what response documents: do and
+// send own the *http.Response, so a caller receives bytes rather than an open
+// body it would have to remember to close. A leaked body is invisible to every
+// other test — the fake transport never exhausts a descriptor — so the Close is
+// asserted directly, on both the plain request path and the JSON-bodied one.
+func TestResponseBodyIsClosedBeforeReturning(t *testing.T) {
+	t.Run("get path", func(t *testing.T) {
+		body := &closeRecorder{Reader: strings.NewReader(`{"login":"acme","type":"Organization"}`)}
+		c := newClient(t, func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusOK, Body: body, Header: http.Header{}}, nil
+		})
+
+		_, err := c.GetAccountType("acme")
+
+		require.NoError(t, err)
+		assert.True(t, body.closed)
+	})
+
+	t.Run("send path", func(t *testing.T) {
+		body := &closeRecorder{Reader: strings.NewReader(`{"merged":true}`)}
+		c := newClient(t, func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusOK, Body: body, Header: http.Header{}}, nil
+		})
+
+		require.NoError(t, c.MergePullRequest("acme", "widget", 7, repo.MergeMethodSquash))
+		assert.True(t, body.closed)
+	})
+}
+
+// TestClientIsAnImmutableValueSafeToCopy pins the property Client documents. A
+// copy is taken and both values are driven through the same call: they issue
+// byte-for-byte identical requests and return the same answer, so a copy is
+// interchangeable with the value it came from. A pointer receiver or mutable
+// state (a cursor, a cached token) would surface here as divergence between the
+// two invocations.
+func TestClientIsAnImmutableValueSafeToCopy(t *testing.T) {
+	var seen []string
+	original := newClient(t, func(r *http.Request) (*http.Response, error) {
+		seen = append(seen, r.Method+" "+r.URL.String()+" "+r.Header.Get("Authorization"))
+		return resp(http.StatusOK, `{"login":"acme","type":"Organization"}`, nil), nil
+	})
+	copied := original
+
+	fromCopy, err := copied.GetAccountType("acme")
+	require.NoError(t, err)
+	fromOriginal, err := original.GetAccountType("acme")
+	require.NoError(t, err)
+
+	assert.Equal(t, fromCopy, fromOriginal)
+	require.Len(t, seen, 2)
+	assert.Equal(t, seen[0], seen[1])
+}
+
 func TestProductionDoer(t *testing.T) {
 	client := productionDoer()
 	require.NotNil(t, client.CheckRedirect)

@@ -17,8 +17,8 @@ var transitionRe = regexp.MustCompile(`from ([0-9][^\s]*?) to ([0-9][^\s]*?)[\s.
 
 // pullBody is the prose of a Dependabot pull request, the sole reliable source
 // of its version transitions. The commit trailer carries dependency-name and
-// dependency-version but not the prior version, so the bump size cannot be
-// derived from it.
+// dependency-version but not the prior version, which leaves the bump size
+// underivable from it.
 type pullBody string
 
 // bump classifies a pull request's version change.
