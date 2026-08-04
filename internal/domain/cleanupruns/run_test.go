@@ -38,12 +38,31 @@ func (f *fakeGH) ListRepos(repo.Owner) ([]github.Repository, error) {
 	return f.repos, f.listReposErr
 }
 
+// ListWorkflowRuns HONOURS the before filter, exactly as the GitHub API does
+// with created=<DATE.
+//
+// It did not, and that is why the tests were blind to a cleanup that deleted
+// nothing: the domain asked the API for old runs only and then applied the keep
+// floor to that set, protecting the very runs it meant to remove. Against a
+// fake that returned everything regardless, the code looked correct. A fake
+// that ignores a filter the real service applies does not model the service —
+// it models the assumption under test.
 func (f *fakeGH) ListWorkflowRuns(_ repo.Owner, r repo.Name, b repo.CreatedBefore) ([]github.WorkflowRun, error) {
 	f.lastBefore = b
 	if f.listRunsErr != nil {
 		return nil, f.listRunsErr
 	}
-	return f.runs[string(r)], nil
+	all := f.runs[string(r)]
+	if b == "" {
+		return all, nil
+	}
+	filtered := make([]github.WorkflowRun, 0, len(all))
+	for _, run := range all {
+		if run.CreatedAt < string(b) {
+			filtered = append(filtered, run)
+		}
+	}
+	return filtered, nil
 }
 
 func (f *fakeGH) DeleteWorkflowRun(o repo.Owner, r repo.Name, id repo.RunID) error {
@@ -80,15 +99,17 @@ func runCleanup(t *testing.T, gh *fakeGH, env map[string]string, cfg Config) (Re
 func TestDeletesOldRuns(t *testing.T) {
 	gh := &fakeGH{runs: map[string][]github.WorkflowRun{
 		"repo1": {
-			mkRun(1, 1, "2025-01-01T00:00:00Z"),
-			mkRun(2, 1, "2025-01-02T00:00:00Z"),
-			mkRun(3, 1, "2025-01-03T00:00:00Z"),
+			mkRun(1, 1, "2024-12-01T00:00:00Z"),
+			mkRun(2, 1, "2024-12-02T00:00:00Z"),
+			mkRun(3, 1, "2024-12-03T00:00:00Z"),
 		},
 	}}
 	res, err := runCleanup(t, gh, nil, Config{Owner: "nicerobot", Repo: "repo1", Days: 30, Keep: 0})
 	require.NoError(t, err)
 	assert.Len(t, gh.deletes, 3)
-	assert.Equal(t, repo.CreatedBefore("2025-01-02"), gh.lastBefore)
+	assert.Empty(t, gh.lastBefore,
+		"the API must be asked for EVERY completed run: the keep floor is a claim about a workflow's "+
+			"whole history, and filtering to old runs first makes it protect the oldest instead")
 	assert.Equal(t, 3, res.Deleted)
 	assert.Equal(t, 0, res.Kept)
 	assert.Equal(t, 1, res.ReposScanned)
@@ -99,11 +120,11 @@ func TestDeletesOldRuns(t *testing.T) {
 func TestKeepsMinimumPerWorkflow(t *testing.T) {
 	gh := &fakeGH{runs: map[string][]github.WorkflowRun{
 		"repo1": {
-			mkRun(1, 10, "2025-01-01T00:00:00Z"),
-			mkRun(2, 10, "2025-01-02T00:00:00Z"),
-			mkRun(3, 10, "2025-01-03T00:00:00Z"),
-			mkRun(4, 20, "2025-01-01T00:00:00Z"),
-			mkRun(5, 20, "2025-01-02T00:00:00Z"),
+			mkRun(1, 10, "2024-12-01T00:00:00Z"),
+			mkRun(2, 10, "2024-12-02T00:00:00Z"),
+			mkRun(3, 10, "2024-12-03T00:00:00Z"),
+			mkRun(4, 20, "2024-12-01T00:00:00Z"),
+			mkRun(5, 20, "2024-12-02T00:00:00Z"),
 		},
 	}}
 	res, err := runCleanup(t, gh, nil, Config{Owner: "nicerobot", Repo: "repo1", Days: 30, Keep: 2})
@@ -116,7 +137,7 @@ func TestKeepsMinimumPerWorkflow(t *testing.T) {
 
 func TestDryRunDoesNotDelete(t *testing.T) {
 	gh := &fakeGH{runs: map[string][]github.WorkflowRun{
-		"repo1": {mkRun(1, 1, "2025-01-01T00:00:00Z"), mkRun(2, 1, "2025-01-02T00:00:00Z")},
+		"repo1": {mkRun(1, 1, "2024-12-01T00:00:00Z"), mkRun(2, 1, "2024-12-02T00:00:00Z")},
 	}}
 	res, err := runCleanup(t, gh, nil, Config{Owner: "nicerobot", Repo: "repo1", Days: 30, Keep: 0, IsDryRun: true})
 	require.NoError(t, err)
@@ -126,7 +147,7 @@ func TestDryRunDoesNotDelete(t *testing.T) {
 }
 
 func TestSingleRepoMode(t *testing.T) {
-	gh := &fakeGH{runs: map[string][]github.WorkflowRun{"target": {mkRun(1, 1, "2025-01-01T00:00:00Z")}}}
+	gh := &fakeGH{runs: map[string][]github.WorkflowRun{"target": {mkRun(1, 1, "2024-12-01T00:00:00Z")}}}
 	_, err := runCleanup(t, gh, nil, Config{Owner: "nicerobot", Repo: "target", Days: 30, Keep: 0})
 	require.NoError(t, err)
 	assert.False(t, gh.listReposCalled)
@@ -138,8 +159,8 @@ func TestAllReposMode(t *testing.T) {
 	gh := &fakeGH{
 		repos: []github.Repository{mkRepo("repo2"), mkRepo("repo1")},
 		runs: map[string][]github.WorkflowRun{
-			"repo1": {mkRun(1, 1, "2025-01-01T00:00:00Z")},
-			"repo2": {mkRun(2, 1, "2025-01-01T00:00:00Z")},
+			"repo1": {mkRun(1, 1, "2024-12-01T00:00:00Z")},
+			"repo2": {mkRun(2, 1, "2024-12-01T00:00:00Z")},
 		},
 	}
 	res, err := runCleanup(t, gh, nil, Config{Owner: "nicerobot", Days: 30, Keep: 0})
@@ -163,7 +184,7 @@ func TestNoOldRunsNothingDeleted(t *testing.T) {
 func TestEmptyRepoSkippedWhenAllKept(t *testing.T) {
 	gh := &fakeGH{
 		repos: []github.Repository{mkRepo("empty")},
-		runs:  map[string][]github.WorkflowRun{"empty": {mkRun(1, 1, "2025-01-01T00:00:00Z")}},
+		runs:  map[string][]github.WorkflowRun{"empty": {mkRun(1, 1, "2024-12-01T00:00:00Z")}},
 	}
 	res, err := runCleanup(t, gh, nil, Config{Owner: "nicerobot", Days: 30, Keep: 5})
 	require.NoError(t, err)
@@ -174,7 +195,7 @@ func TestEmptyRepoSkippedWhenAllKept(t *testing.T) {
 }
 
 func TestAutoDetectsCurrentRepo(t *testing.T) {
-	gh := &fakeGH{runs: map[string][]github.WorkflowRun{"widget": {mkRun(1, 1, "2025-01-01T00:00:00Z")}}}
+	gh := &fakeGH{runs: map[string][]github.WorkflowRun{"widget": {mkRun(1, 1, "2024-12-01T00:00:00Z")}}}
 	_, err := runCleanup(t, gh, map[string]string{"GITHUB_REPOSITORY": "acme/widget"}, Config{Days: 30, Keep: 0})
 	require.NoError(t, err)
 	assert.False(t, gh.listReposCalled)
@@ -210,7 +231,7 @@ func TestListRunsError(t *testing.T) {
 func TestDeleteError(t *testing.T) {
 	gh := &fakeGH{
 		deleteErr: errors.New("boom"),
-		runs:      map[string][]github.WorkflowRun{"repo1": {mkRun(1, 1, "2025-01-01T00:00:00Z")}},
+		runs:      map[string][]github.WorkflowRun{"repo1": {mkRun(1, 1, "2024-12-01T00:00:00Z")}},
 	}
 	_, err := runCleanup(t, gh, nil, Config{Owner: "nicerobot", Repo: "repo1", Days: 30, Keep: 0})
 	require.Error(t, err)

@@ -153,11 +153,16 @@ func pruneRepo(
 	keep repo.KeepCount,
 	isDryRun repo.DryRun,
 ) (RepoResult, bool, error) {
-	runs, err := d.github.ListWorkflowRuns(owner, name, cutoff)
+	// EVERY completed run, not just the ones past the cutoff. The keep floor
+	// means "this workflow always retains N runs of history", which can only be
+	// judged against the full history — asking the API for the old ones alone
+	// and then keeping N of THOSE protects the oldest runs and guarantees the
+	// newest are the ones considered for deletion, which is backwards.
+	runs, err := d.github.ListWorkflowRuns(owner, name, "")
 	if err != nil {
 		return RepoResult{}, false, err
 	}
-	toDelete, kept := partition(runs, keep)
+	toDelete, kept := partition(runs, keep, cutoff)
 	if len(toDelete) == 0 {
 		return RepoResult{}, false, nil
 	}
@@ -165,37 +170,6 @@ func pruneRepo(
 		return RepoResult{}, false, err
 	}
 	return RepoResult{Name: string(name), Deleted: len(toDelete), Kept: kept}, true, nil
-}
-
-func partition(runs []github.WorkflowRun, keep repo.KeepCount) ([]github.WorkflowRun, int) {
-	var toDelete []github.WorkflowRun
-	kept := 0
-	for _, group := range groupByWorkflow(runs) {
-		sortNewestFirst(group)
-		k := min(len(group), int(keep))
-		kept += k
-		toDelete = append(toDelete, group[k:]...)
-	}
-	return toDelete, kept
-}
-
-func groupByWorkflow(runs []github.WorkflowRun) [][]github.WorkflowRun {
-	index := map[int64]int{}
-	var groups [][]github.WorkflowRun
-	for _, r := range runs {
-		i, ok := index[r.WorkflowID]
-		if !ok {
-			i = len(groups)
-			index[r.WorkflowID] = i
-			groups = append(groups, nil)
-		}
-		groups[i] = append(groups[i], r)
-	}
-	return groups
-}
-
-func sortNewestFirst(runs []github.WorkflowRun) {
-	sort.SliceStable(runs, func(i, j int) bool { return runs[i].CreatedAt > runs[j].CreatedAt })
 }
 
 func deleteRuns(
