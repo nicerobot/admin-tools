@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -301,7 +300,7 @@ func (c Client) do(method, rawurl string, query url.Values) (response, error) {
 		return response{}, constants.ErrHTTPStatus.With(err, "url", full)
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := readBody(resp.Body)
 	if err != nil {
 		return response{}, constants.ErrHTTPStatus.With(err, "url", full)
 	}

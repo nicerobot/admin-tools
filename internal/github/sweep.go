@@ -13,7 +13,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 
@@ -118,7 +117,7 @@ func (c Client) send(method, rawurl string, payload any) (response, error) {
 		return response{}, constants.ErrHTTPStatus.With(err, "url", rawurl)
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := readBody(resp.Body)
 	if err != nil {
 		return response{}, constants.ErrHTTPStatus.With(err, "url", rawurl)
 	}

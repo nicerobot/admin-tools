@@ -10,6 +10,8 @@ const (
 	ErrDecodeResponse errs.Const = "failed to decode GitHub API response"
 	// ErrHTTPStatus means a GitHub API call returned an unexpected status.
 	ErrHTTPStatus errs.Const = "unexpected GitHub API status"
+	// ErrResponseTooLarge means a GitHub API response exceeded the in-memory ceiling.
+	ErrResponseTooLarge errs.Const = "GitHub API response exceeds the size limit"
 	// ErrInvalidSettings means the org settings.yml file failed to parse.
 	ErrInvalidSettings errs.Const = "settings file is not valid YAML"
 	// ErrInvalidValue means a value (e.g. an output format) is not recognized.
