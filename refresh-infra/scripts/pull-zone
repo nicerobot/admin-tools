@@ -272,6 +272,75 @@ pull-settings() {
   printf >&3 '  settings.yaml: %s settings\n' "${SETTING_COUNT}"
 }
 
+# Zone security state that is NOT a DNS record and NOT a zone setting, so none
+# of the pulls above would notice it changing. Each of these was asserted
+# fleet-wide and was, until now, watched by nothing:
+#
+#   dnssec           — status plus the DS the registrar must publish. "pending"
+#                      means enabled in Cloudflare but never completed at the
+#                      registrar, which looks configured and protects nothing.
+#   certificate_packs — 11 duplicate packs were deleted on 2026-08-08, each
+#                      renewing independently and multiplying CT-log alerts.
+#                      Nothing recorded they had existed.
+#   security_txt     — Cloudflare-managed, not a file in the site repo, so it is
+#                      invisible to both this mirror and the www.* repos.
+#
+# Written to one file rather than three: they share a cause (zone-level security
+# state outside DNS) and a reviewer reads them together.
+pull-security() {
+  local DNSSEC PACKS SECTXT
+
+  DNSSEC="$(cf-api "/zones/${ZONE_ID}/dnssec")"
+  PACKS="$(cf-api "/zones/${ZONE_ID}/ssl/certificate_packs?per_page=50")"
+  SECTXT="$(cf-api "/zones/${ZONE_ID}/security-center/securitytxt")"
+
+  # Unlike settings, these endpoints can legitimately be unavailable — a token
+  # may lack the scope. Distinguish "read it, it is empty" from "could not read
+  # it": only the former should overwrite a committed file.
+  [[ "$(jq -r '.success' <<<"${DNSSEC}")" = 'true' ]] || {
+    printf >&4 '  ✗ security.yaml: dnssec unreadable — keeping committed file\n'
+    return 0
+  }
+
+  jq -n \
+    --arg zone "${ZONE}" \
+    --arg zone_id "${ZONE_ID}" \
+    --argjson dnssec "${DNSSEC}" \
+    --argjson packs "${PACKS}" \
+    --argjson sectxt "${SECTXT}" \
+    '{
+      zone: $zone,
+      zone_id: $zone_id,
+      dnssec: {
+        status: ($dnssec.result.status // "unknown"),
+        algorithm: ($dnssec.result.algorithm // null),
+        digest_type: ($dnssec.result.digest_type // null),
+        key_tag: ($dnssec.result.key_tag // null),
+        ds: ($dnssec.result.ds // null)
+      },
+      certificate_packs: [
+        ($packs.result // [])[]
+        | {
+            type,
+            status,
+            certificate_authority: (.certificate_authority // null),
+            validity_days: (.validity_days // null),
+            hosts: ((.hosts // []) | sort)
+          }
+      ] | sort_by(.type, (.hosts | join(","))),
+      security_txt: {
+        enabled: ($sectxt.result.enabled // false),
+        contact: ($sectxt.result.contact // []),
+        expires: ($sectxt.result.expires // null)
+      }
+    }' |
+    yq -P '.' >"${CF_DIR}/security.yaml"
+
+  printf >&3 '  security.yaml: dnssec=%s packs=%s\n' \
+    "$(jq -r '.result.status // "?"' <<<"${DNSSEC}")" \
+    "$(jq -r '(.result // []) | length' <<<"${PACKS}")"
+}
+
 # --- Main ---
 
 verify-access
@@ -279,6 +348,7 @@ pull-dns
 pull-rules
 pull-email
 pull-settings
+pull-security
 
 printf >&3 '  ✓ done\n'
 
