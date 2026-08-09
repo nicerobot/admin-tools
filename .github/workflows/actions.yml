@@ -3,8 +3,18 @@ name: actions
 on:
   push:
     branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+      - ".actionlint*"
+      - ".standards.yaml"
   pull_request:
     branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+      - ".actionlint*"
+      - ".standards.yaml"
 concurrency:
   group: actions-${{ github.ref }}
   cancel-in-progress: true
@@ -18,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: nicerobot/tools.build/ci/actions@v2

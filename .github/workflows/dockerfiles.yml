@@ -3,8 +3,26 @@ name: dockerfiles
 on:
   push:
     branches: [main]
+    paths:
+      - "**Dockerfile"
+      - "**Dockerfile.*"
+      - "**.dockerfile"
+      - "docker/**"
+      - ".dockerignore"
+      - ".hadolint*"
+      - ".standards.yaml"
+      - ".github/workflows/dockerfiles.yml"
   pull_request:
     branches: [main]
+    paths:
+      - "**Dockerfile"
+      - "**Dockerfile.*"
+      - "**.dockerfile"
+      - "docker/**"
+      - ".dockerignore"
+      - ".hadolint*"
+      - ".standards.yaml"
+      - ".github/workflows/dockerfiles.yml"
 concurrency:
   group: dockerfiles-${{ github.ref }}
   cancel-in-progress: true
@@ -18,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: nicerobot/tools.build/ci/dockerfiles@v2

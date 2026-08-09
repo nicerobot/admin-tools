@@ -3,8 +3,22 @@ name: docs
 on:
   push:
     branches: [main]
+    paths:
+      - "**.md"
+      - "**.mdx"
+      - ".markdownlint*"
+      - ".prettierrc*"
+      - ".standards.yaml"
+      - ".github/workflows/docs.yml"
   pull_request:
     branches: [main]
+    paths:
+      - "**.md"
+      - "**.mdx"
+      - ".markdownlint*"
+      - ".prettierrc*"
+      - ".standards.yaml"
+      - ".github/workflows/docs.yml"
 concurrency:
   group: docs-${{ github.ref }}
   cancel-in-progress: true
@@ -18,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: nicerobot/tools.build/ci/docs@v2

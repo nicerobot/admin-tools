@@ -18,7 +18,7 @@ jobs:
     steps:
       # Full history + tags so the SemVer computation sees every prior tag; default
       # persist-credentials (true) is REQUIRED here — this job pushes the new tag.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       # Opt out per repo by committing a `.no-autorelease` file to the root: the
@@ -47,7 +47,7 @@ jobs:
     steps:
       # Check out the tag, not the branch: goreleaser derives the version from the
       # checked-out ref, and the branch tip is not the tag it just created.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ needs.release.outputs.version }}
@@ -67,7 +67,7 @@ jobs:
             echo "present=false" >>"$GITHUB_OUTPUT"
             echo "no goreleaser config to publish with — skipping"
           fi
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         if: steps.cfg.outputs.present == 'true'
         with:
           go-version-file: go.mod
@@ -75,13 +75,13 @@ jobs:
           cache: true
       # goreleaser fails a `dockers:` push without a registry login; for a repo
       # that only builds binaries this is a harmless no-op.
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         if: steps.cfg.outputs.present == 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: goreleaser/goreleaser-action@v6
+      - uses: goreleaser/goreleaser-action@v7
         if: steps.cfg.outputs.present == 'true'
         with:
           version: "~> v2"
