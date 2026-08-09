@@ -30,8 +30,13 @@ TRACKED_SETTINGS=(
   0rtt
   always_use_https
   automatic_https_rewrites
+  browser_check
+  email_obfuscation
+  hotlink_protection
   min_tls_version
   security_header
+  security_level
+  server_side_exclude
   ssl
   tls_1_3
 )
