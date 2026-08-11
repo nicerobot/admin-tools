@@ -15,6 +15,7 @@ on:
       - ".github/actions/**"
       - ".actionlint*"
       - ".standards.yaml"
+  workflow_dispatch:
 concurrency:
   group: actions-${{ github.ref }}
   cancel-in-progress: true

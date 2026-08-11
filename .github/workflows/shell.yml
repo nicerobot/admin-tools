@@ -6,8 +6,10 @@ on:
     paths:
       - "**.sh"
       - "**.bash"
-      - "bin/**"
-      - "scripts/**"
+      - "**/bin/**"
+      - "**/scripts/**"
+      - "**/hooks/**"
+      - "**/check"
       - ".shellcheckrc"
       - ".editorconfig"
       - ".standards.yaml"
@@ -17,12 +19,15 @@ on:
     paths:
       - "**.sh"
       - "**.bash"
-      - "bin/**"
-      - "scripts/**"
+      - "**/bin/**"
+      - "**/scripts/**"
+      - "**/hooks/**"
+      - "**/check"
       - ".shellcheckrc"
       - ".editorconfig"
       - ".standards.yaml"
       - ".github/workflows/shell.yml"
+  workflow_dispatch:
 concurrency:
   group: shell-${{ github.ref }}
   cancel-in-progress: true

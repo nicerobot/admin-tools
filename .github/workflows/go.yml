@@ -31,6 +31,7 @@ on:
       - ".goreleaser.yaml"
       - ".standards.yaml"
       - ".github/workflows/go.yml"
+  workflow_dispatch:
 concurrency:
   group: go-${{ github.ref }}
   cancel-in-progress: true
@@ -50,6 +51,16 @@ jobs:
         with:
           persist-credentials: false
       - uses: nicerobot/tools.build/ci/go@v2
+        env:
+          # The wfpin analyzer inverts its rule for actions the RUNNER owns —
+          # somebody else's must be pinned, ours must float on the major tag —
+          # so it has to be told which accounts are ours. That list is private
+          # to whoever runs the gate and is never this repository's business:
+          # only the variable NAME appears here, and the value lives in the
+          # org's (or repo's) Actions variables, so it never enters a public
+          # repository. Unset simply leaves that half of the rule inert, which
+          # is why a fork or a stranger's checkout still gates cleanly.
+          YZE_WFPOLICY_OWNERS: ${{ vars.YZE_WFPOLICY_OWNERS }}
 
   # Early warning, NOT a gate. The `go` job above is the gate, and it pins the
   # toolchain via the ci/go@v2 image so every repo compiles identically. This job

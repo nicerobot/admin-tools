@@ -19,6 +19,7 @@ on:
       - ".prettierrc*"
       - ".standards.yaml"
       - ".github/workflows/docs.yml"
+  workflow_dispatch:
 concurrency:
   group: docs-${{ github.ref }}
   cancel-in-progress: true

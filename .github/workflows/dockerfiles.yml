@@ -23,6 +23,7 @@ on:
       - ".hadolint*"
       - ".standards.yaml"
       - ".github/workflows/dockerfiles.yml"
+  workflow_dispatch:
 concurrency:
   group: dockerfiles-${{ github.ref }}
   cancel-in-progress: true
