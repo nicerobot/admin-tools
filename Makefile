@@ -36,7 +36,7 @@
 # (Run the gate locally with `make tools` once to populate ${GOBIN}, then `make ci`.)
 #
 # Everything else is derived from the repo's own source of truth:
-#   BINARIES   <- the `id:` values under `builds:` in ./.goreleaser.yml
+#   BINARIES   <- the `id:` values under `builds:` in ./.goreleaser.yaml
 #   SUBMODULES <- nested go.mod dirs (excluding vendor/testdata/fixtures)
 # Override either on the command line for the rare repo that needs to.
 #
@@ -104,6 +104,18 @@ YQ = $(if $(GOBIN),$(GOBIN)/yq,yq)
 # Maximum source line length enforced by golines (it shortens longer lines).
 GOLINES_MAX ?= 120
 
+# golines shells out to a BASE FORMATTER once per file, and with none named it
+# uses goimports — which resolves every import against the module cache on each
+# spawn. The cost therefore scales with the dependency graph rather than with the
+# source: 186 files in modern-go-application took 37 seconds, one goimports
+# process per file, and the same files take under a second with gofmt.
+#
+# Naming gofmt loses nothing. Import grouping and ordering are enforced by
+# golangci-lint's gci/goimports formatters in `make lint` — see fmt-check's own
+# comment below — so golines re-resolving them is work the gate already does,
+# paid again by every repository on every `make fmt` and every `make check`.
+GOLINES_FLAGS ?= -m $(GOLINES_MAX) --base-formatter=gofmt
+
 # TOOLS_BUILD points at a local nicerobot/tools.build checkout so `make tools` /
 # `make doctor` can run its scripts. Defaults to the home-ecosystem clone path;
 # override on the command line elsewhere. CI never runs these (the image bakes the
@@ -133,14 +145,31 @@ tools-version: ## Print the version of every pinned tool (from ${GOBIN})
 # BINARIES: the `id:` values under `builds:` in the consumer's goreleaser config.
 # Derived with yq (not awk over raw YAML, which mis-parsed a templated id like
 # `id: "{{ .ProjectName }}"` into `--id "{{` and broke the build). The config is
-# either .goreleaser.yaml or .goreleaser.yml; an id that is itself a
+# named exactly once (see GORELEASER_CONFIG_NAME); an id that is itself a
 # `{{ .ProjectName }}` template — or absent — resolves to the project_name value,
 # while literal ids pass through unchanged.
 # The yq pipeline: bind project_name as ${pn}, take each build id (falling back to
 # ${pn} when a build sets none), and replace a `{{ ... }}` template id with ${pn} —
 # so a literal id passes through and a `{{ .ProjectName }}` id resolves to the
 # project name. One yq call, no shell loop.
-GORELEASER_CONFIG ?= $(firstword $(wildcard .goreleaser.yaml .goreleaser.yml))
+# ONE spelling, named once. goreleaser accepts several — .goreleaser.yaml,
+# .goreleaser.yml, and the dotless forms — and this line used to accept two of
+# them with $(wildcard .goreleaser.yaml .goreleaser.yml). That is what let the
+# fleet carry both: 101 repositories on .yml and 54 on .yaml, split cleanly by
+# org and by whenever each org was set up, with the gate passing either way so
+# nothing could ever detect the drift and every new repository inherited
+# whichever spelling its template happened to hold. A build system that accepts
+# two spellings guarantees it will always have two.
+#
+# .goreleaser.yaml is the survivor: it is what goreleaser's own documentation and
+# `goreleaser init` produce. Any other spelling is a hard failure of the gate
+# rather than a silently accepted alternative — see the goreleaser-name target.
+GORELEASER_CONFIG_NAME = .goreleaser.yaml
+GORELEASER_CONFIG ?= $(wildcard $(GORELEASER_CONFIG_NAME))
+
+# GORELEASER_MISNAMED is every spelling goreleaser would also answer to, which
+# is exactly what must not be present.
+GORELEASER_MISNAMED = $(wildcard .goreleaser.yml goreleaser.yaml goreleaser.yml)
 BINARIES ?= $(shell test -n '$(GORELEASER_CONFIG)' && $(YQ) '.project_name as $$pn | .builds[] | select(.skip != true) | .id // $$pn | sub("\{\{.*\}\}", $$pn)' '$(GORELEASER_CONFIG)' 2>/dev/null)
 
 # SUBMODULES: nested modules (own go.mod), excluding vendored/test-fixture mods,
@@ -303,7 +332,7 @@ standards-validate: ## Validate .standards.yaml exemptions carry reasons
 # runs `test-all` (race) and `build-all` (cross-compile). The complexity linters
 # are part of `lint` now (folded into .golangci.yaml).
 .PHONY: check
-check: standards-validate fmt-check lint staticcheck deadcode tidy-check vulncheck cover-gate ## Full developer gate (CI runs this + race & cross-compile)
+check: standards-validate goreleaser-name fmt-check lint staticcheck deadcode tidy-check vulncheck cover-gate ## Full developer gate (CI runs this + race & cross-compile)
 
 # cover-gate routes the coverage step through $(COVER_GATE) (default `cover`) so
 # a repo can swap the coverage policy by setting COVER_GATE in Makefile.local —
@@ -337,6 +366,10 @@ lint-raw: vet
 	PATH="$(GOBIN):$${PATH}" $(STICKLER)
 
 .PHONY: lint
+.PHONY: goreleaser-name
+goreleaser-name: ## Fail if the goreleaser config is spelled any way but the one
+	$(if $(GORELEASER_MISNAMED),$(error goreleaser config is misnamed: $(GORELEASER_MISNAMED) — rename it to $(GORELEASER_CONFIG_NAME), which is the one spelling this fleet uses and the one `goreleaser init` produces))
+
 lint: ## Run the stickler lint suite (golangci-lint + yze; ratchet-aware; .stickler.yaml-merged config)
 	@$(call standards-run,gate:lint,$(MAKE) lint-raw)
 
@@ -659,18 +692,18 @@ $(PORTABILITY_CHECKS): portability@%:
 
 .PHONY: release
 release: pre-build ## Create a release with goreleaser
-	$(if $(GORELEASER_CONFIG),$(GORELEASER) release --clean,@echo "no .goreleaser.yml — library released via its git tag; nothing to do")
+	$(if $(GORELEASER_CONFIG),$(GORELEASER) release --clean,@echo "no .goreleaser.yaml — library released via its git tag; nothing to do")
 
 .PHONY: release-snapshot
 release-snapshot: pre-build ## Create a snapshot release (no git tag required)
-	$(if $(GORELEASER_CONFIG),$(GORELEASER) release --snapshot --clean,@echo "no .goreleaser.yml — nothing to release")
+	$(if $(GORELEASER_CONFIG),$(GORELEASER) release --snapshot --clean,@echo "no .goreleaser.yaml — nothing to release")
 
 ##@ Docker
 
 # Centralized image build. Everything is derived from the consumer repo itself,
 # so it sets nothing in the common case:
 #   DOCKER_IMAGE      <- ghcr.io/<owner>/<repo-dir-name>  (owner from origin remote)
-#   DOCKER_ENTRYPOINT <- the first id under builds: in .goreleaser.yml
+#   DOCKER_ENTRYPOINT <- the first id under builds: in .goreleaser.yaml
 # The consumer's Dockerfile is expected to `FROM` the shared distroless runtime
 # base (nicerobot/tools.build/runtime), which bakes the unprivileged user, certs
 # and the distroless base — so the consumer Dockerfile is just COPY + ENTRYPOINT.
@@ -733,16 +766,31 @@ docker-buildx: build-all ## Build + push a multi-arch image manifest (needs buil
 # form too; golines rewrote it to a quoted string, which silently turns the
 # edge-case fixture into a duplicate of the ordinary one. The gate was failing
 # on a file whose non-conformance is its entire purpose.
-FMT_FILES = $(shell find . -name '*.go' -not -path '*/_*' -not -path '*/.*' -not -path '*/testdata/*')
+# GENERATED files are excluded by their own marker, not by path. A generated
+# file says DO NOT EDIT in its header and the formatters were editing it anyway:
+# `make fmt` in modern-go-application rewrote gqlgen's and protoc's output, so a
+# regeneration and a format fought over the same lines forever and every `make
+# fmt` produced a diff nobody wrote. One marker covers every generated tree
+# without naming any of them.
+#
+# The pattern is Go's OWN definition of the marker — a whole line, at the head of
+# the file, ending in a period — and not merely the words appearing somewhere.
+# Matching the words anywhere excluded three hand-written files in go-yze, which
+# is the analyzer family that DETECTS the marker and therefore quotes it: a file
+# SHOWING the convention was read as a file MAKING the claim, and stopped being
+# formatted. `head -5` bounds the search to the header a generated file puts it
+# in, so a quotation further down cannot exempt anything.
+FMT_FILES = $(shell find . -name '*.go' -not -path '*/_*' -not -path '*/.*' -not -path '*/testdata/*' \
+	-exec sh -c 'head -5 "$$1" | grep -qE "^// Code generated .* DO NOT EDIT\.$$" || echo "$$1"' _ {} \;)
 
 .PHONY: fmt
 fmt: ## Format code (golines then gofumpt)
-	@[ -z "$(FMT_FILES)" ] || $(GOLINES) -m $(GOLINES_MAX) -w $(FMT_FILES)
+	@[ -z "$(FMT_FILES)" ] || $(GOLINES) $(GOLINES_FLAGS) -w $(FMT_FILES)
 	@[ -z "$(FMT_FILES)" ] || $(GOFUMPT) -l -w $(FMT_FILES)
 
 .PHONY: fmt-check
 fmt-check: ## Fail if any line exceeds GOLINES_MAX (gofumpt/imports are enforced by lint)
-	@out="$$([ -z "$(FMT_FILES)" ] || $(GOLINES) -m $(GOLINES_MAX) -l $(FMT_FILES))"; \
+	@out="$$([ -z "$(FMT_FILES)" ] || $(GOLINES) $(GOLINES_FLAGS) -l $(FMT_FILES))"; \
 	if [ -n "$${out}" ]; then echo "lines exceed $(GOLINES_MAX) cols (run 'make fmt'):"; echo "$${out}"; exit 1; fi
 
 .PHONY: generate

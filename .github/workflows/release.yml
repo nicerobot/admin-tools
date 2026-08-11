@@ -1,6 +1,12 @@
 # Managed by nicerobot/tools.repository (distribute-build)
 name: release
 on:
+  # A literal trigger, not the schedule marker the gate workflows carry:
+  # the marker also injects a cron, and a release must never fire on a timer.
+  # Without this, a release that failed against a superseded image can only be
+  # re-run against the commit it originally ran on, so its badge stays red until
+  # someone pushes a commit whose only purpose is to retrigger CI.
+  workflow_dispatch:
   push:
     branches: [main]
 concurrency:
@@ -55,13 +61,14 @@ jobs:
       - id: cfg
         shell: bash
         run: |
-          # -s, not -f: an EMPTY .goreleaser.yml is not a configuration. A
+          # -s, not -f: an EMPTY .goreleaser.yaml is not a configuration. A
           # library repo that has nothing to publish carries the file as a
           # zero-byte placeholder, and goreleaser given an empty config falls
           # back to building the module root — which has no main — and fails
           # every release, on every push, forever. Requiring a non-empty file
           # makes the placeholder mean what it looks like it means.
-          if [ -s .goreleaser.yml ] || [ -s .goreleaser.yaml ]; then
+          # ONE spelling. Accepting two is what let the fleet carry both.
+          if [ -s .goreleaser.yaml ]; then
             echo "present=true" >>"$GITHUB_OUTPUT"
           else
             echo "present=false" >>"$GITHUB_OUTPUT"
